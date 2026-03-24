@@ -1,9 +1,10 @@
+from typing import Optional
+from uuid import UUID
 from sqlmodel import Field, Relationship
 from app.shared.base_domain.model import BaseTable
-from uuid import UUID
 from app.domain.personal_data.model import DatosSensibles   
 
-class Admin(BaseTable, table=True):
+class Administrador(BaseTable, table=True):
     __tablename__ = "administrador"
 
     datos_sensibles_id: UUID = Field(foreign_key="datos_sensibles.id", unique=True)

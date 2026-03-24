@@ -1,8 +1,8 @@
+from typing import Optional
+from uuid import UUID
 from app.shared.base_domain.model import BaseTable
 from app.domain.personal_data.model import DatosSensibles
 from sqlmodel import Field, Relationship
-from app.domain.service.model import Servicio
-
 
 
 class Gerente(BaseTable, table=True):
@@ -22,7 +22,7 @@ class GerenteServicio(BaseTable, table=True):
     servicio_id: UUID = Field(foreign_key="servicio.id")
 
     gerente: Gerente = Relationship(back_populates="gerente_servicios")
-    servicio: Servicio = Relationship(back_populates="gerente_servicios")
+    servicio: "Servicio" = Relationship(back_populates="gerente_servicios")
     tickets_ecosistema: list["TicketEcosistema"] = Relationship(
         back_populates="gerente_servicio"
     )    

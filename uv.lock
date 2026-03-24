@@ -209,18 +209,6 @@ wheels = [
 ]
 
 [[package]]
-name = "fastapi-class"
-version = "3.7.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "fastapi" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9a/3d/f3c2bc700a982a9a4cd56fda90c8cb04eabf2218478d24bae6569ff80c42/fastapi_class-3.7.0.tar.gz", hash = "sha256:0f36cab68c30661008ae8c210e8ba27f78d1df127591fc65c2623c16c28cb3e8", size = 55683, upload-time = "2025-01-21T22:52:22.249Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/d7/5c71e17d05d3f818fa1ed2b6533bb52f825ac925b3f2941bf334a468391e/fastapi_class-3.7.0-py3-none-any.whl", hash = "sha256:21f28355d32cdd7de6e4790c49a3cb4c192264e3fb6518b5fe7ec0bc20591c66", size = 9378, upload-time = "2025-01-21T22:52:20.046Z" },
-]
-
-[[package]]
 name = "greenlet"
 version = "3.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -293,7 +281,6 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "cryptography" },
     { name = "fastapi" },
-    { name = "fastapi-class" },
     { name = "pydantic-settings" },
     { name = "sqlmodel" },
     { name = "uvicorn" },
@@ -304,7 +291,6 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "cryptography", specifier = ">=46.0.5" },
     { name = "fastapi", specifier = ">=0.135.1" },
-    { name = "fastapi-class", specifier = ">=3.7.0" },
     { name = "pydantic-settings", specifier = ">=2.13.1" },
     { name = "sqlmodel", specifier = ">=0.0.37" },
     { name = "uvicorn", specifier = ">=0.41.0" },

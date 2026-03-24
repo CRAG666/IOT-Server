@@ -1,29 +1,28 @@
 from sqlmodel import Field, Relationship
-from app.domain.service.model import Service
 from app.shared.base_domain.model import BaseTable
 from uuid import UUID
 
 class Device(BaseTable, table=True):
-    __tablename__ = "device"
+    __tablename__ = "dispositivo"
 
-    nombre: str
-    modelo: str | None = None
-    numero_serie: str | None = Field(default=None, unique=True)
-    ip: str | None = None #sensible
-    mac: str | None = Field(default=None, unique=True) #sensible
-    activo: bool = Field(default=True)
+    nombre: str = Field(alias="name")
+    marca: str | None = Field(default=None, alias="brand")
+    modelo: str | None = Field(default=None, alias="model")
+    numero_serie: str | None = Field(default=None, unique=True, alias="serial_number")
+    ip: str | None = None
+    mac: str | None = Field(default=None, unique=True)
+    activo: bool = Field(default=True, alias="is_active")
 
-    device_services: list["DeviceService"] = Relationship(
-        back_populates="device"
+    dispositivo_servicios: list["DispositivoServicio"] = Relationship(
+        back_populates="dispositivo"
     )
 
 
-class DeviceService(BaseTable, table=True):
-    __tablename__ = "device_service"
+class DispositivoServicio(BaseTable, table=True):
+    __tablename__ = "dispositivo_servicio"
 
-    device_id: UUID = Field(foreign_key="device.id")
-    service_id: UUID = Field(foreign_key="service.id")
+    dispositivo_id: UUID = Field(foreign_key="dispositivo.id")
+    servicio_id: UUID = Field(foreign_key="servicio.id")
 
-    device: Device = Relationship(back_populates="device_services")
-    service: Service = Relationship(back_populates="device_services")
-    activo: bool = Field(default=True)
+    dispositivo: Device = Relationship(back_populates="dispositivo_servicios")
+    servicio: "Servicio" = Relationship(back_populates="dispositivo_servicios")
