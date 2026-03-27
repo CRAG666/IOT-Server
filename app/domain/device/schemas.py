@@ -4,13 +4,13 @@ from pydantic import BaseModel
 
 
 class DeviceCreate(BaseModel):
-    nombre: str
+    name: str
 
 
 class DeviceUpdate(BaseModel):
-    nombre: Optional[str] = None
+    name: Optional[str] = None
 
 
 class DeviceResponse(BaseModel):
     id: UUID
-    nombre: str
+    name: str

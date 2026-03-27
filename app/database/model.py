@@ -1,205 +1,208 @@
 from typing import Optional
 from uuid import UUID
 from app.shared.base_domain.model import BaseTable
+from datetime import datetime
+from sqlmodel import Field, Relationship, SQLModel
+from app.database.format import UserPlainAttribute
 
-class DatosPersonalesNoCriticos(BaseTable, table=True):
-    __tablename__ = "datos_personales_no_criticos"
+class NonCriticalPersonalData(BaseTable, table=True):
+    __tablename__ = "non_critical_personal_data"
 
-    nombre: str
-    apellido_paterno: str
-    apellido_materno: str | None = None
-    telefono: str | None = None
-    direccion: str | None = None
-    ciudad: str | None = None
-    estado: str | None = None
-    codigo_postal: str | None = None
-    fecha_nacimiento: datetime | None = None
-    activo: bool = Field(default=True)
+    first_name: str
+    last_name: str
+    second_last_name: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    birth_date: datetime | None = None
+    is_active: bool = Field(default=True)
 
-    datos_sensibles: Optional["DatosSensibles"] = Relationship(
-        back_populates="datos_no_criticos"
+    sensitive_data: Optional["SensitiveData"] = Relationship(
+        back_populates="non_critical_data"
     )
 
 
-class DatosSensibles(BaseTable, table=True):
-    __tablename__ = "datos_sensibles"
+class SensitiveData(BaseTable, table=True):
+    __tablename__ = "sensitive_data"
 
-    datos_no_criticos_id: UUID = Field(
-        foreign_key="datos_personales_no_criticos.id", unique=True
+    non_critical_data_id: UUID = Field(
+        foreign_key="non_critical_personal_data.id", unique=True
     )
     email: str = Field(unique=True)
     password_hash: str
     curp: str | None = Field(default=None, unique=True)
     rfc: str | None = Field(default=None, unique=True)
 
-    datos_no_criticos: DatosPersonalesNoCriticos = Relationship(
-        back_populates="datos_sensibles"
+    non_critical_data: NonCriticalPersonalData = Relationship(
+        back_populates="sensitive_data"
     )
-    administrador: Optional["Administrador"] = Relationship(
-        back_populates="datos_sensibles"
+    administrator: Optional["Administrator"] = Relationship(
+        back_populates="sensitive_data"
     )
-    gerente: Optional["Gerente"] = Relationship(back_populates="datos_sensibles")
-    usuario: Optional["Usuario"] = Relationship(back_populates="datos_sensibles")
+    manager: Optional["Manager"] = Relationship(back_populates="sensitive_data")
+    user: Optional["User"] = Relationship(back_populates="sensitive_data")
 
 
-class Administrador(BaseTable, table=True):
-    __tablename__ = "administrador"
+class Administrator(BaseTable, UserPlainAttribute, table=True):
+    __tablename__ = "administrator"
 
-    datos_sensibles_id: UUID = Field(foreign_key="datos_sensibles.id", unique=True)
-    master: bool = Field(default=False)
-    activo: bool = Field(default=True)
+    sensitive_data_id: UUID = Field(foreign_key="sensitive_data.id", unique=True)
+    is_master: bool = Field(default=False)
+    is_active: bool = Field(default=True)
 
-    datos_sensibles: DatosSensibles = Relationship(back_populates="administrador")
-    servicios_registrados: list["Servicio"] = Relationship(
-        back_populates="registrado_por"
+    sensitive_data: SensitiveData = Relationship(back_populates="administrator")
+    manager_services: list["Service"] = Relationship(
+        back_populates="registered_by"
     )
-    aplicaciones_registradas: list["Aplicacion"] = Relationship(
-        back_populates="registrada_por"
-    )
-
-
-class Gerente(BaseTable, table=True):
-    __tablename__ = "gerente"
-
-    datos_sensibles_id: UUID = Field(foreign_key="datos_sensibles.id", unique=True)
-    activo: bool = Field(default=True)
-
-    datos_sensibles: DatosSensibles = Relationship(back_populates="gerente")
-    gerente_servicios: list["GerenteServicio"] = Relationship(back_populates="gerente")
-
-
-class Usuario(BaseTable, table=True):
-    __tablename__ = "usuario"
-
-    datos_sensibles_id: UUID = Field(foreign_key="datos_sensibles.id", unique=True)
-    activo: bool = Field(default=True)
-
-    datos_sensibles: DatosSensibles = Relationship(back_populates="usuario")
-    usuario_roles: list["UsuarioRol"] = Relationship(back_populates="usuario")
-
-
-class Servicio(BaseTable, table=True):
-    __tablename__ = "servicio"
-
-    nombre: str = Field(unique=True)
-    descripcion: str | None = None
-    administrador_id: UUID = Field(foreign_key="administrador.id")
-    activo: bool = Field(default=True)
-
-    registrado_por: Administrador = Relationship(back_populates="servicios_registrados")
-    gerente_servicios: list["GerenteServicio"] = Relationship(back_populates="servicio")
-    aplicacion_servicios: list["AplicacionServicio"] = Relationship(
-        back_populates="servicio"
-    )
-    dispositivo_servicios: list["DispositivoServicio"] = Relationship(
-        back_populates="servicio"
-    )
-    roles: list["Rol"] = Relationship(back_populates="servicio")
-    tickets_servicio: list["TicketServicio"] = Relationship(back_populates="servicio")
-
-
-class GerenteServicio(BaseTable, table=True):
-    __tablename__ = "gerente_servicio"
-
-    gerente_id: UUID = Field(foreign_key="gerente.id")
-    servicio_id: UUID = Field(foreign_key="servicio.id")
-
-    gerente: Gerente = Relationship(back_populates="gerente_servicios")
-    servicio: Servicio = Relationship(back_populates="gerente_servicios")
-    tickets_ecosistema: list["TicketEcosistema"] = Relationship(
-        back_populates="gerente_servicio"
+    registered_applications: list["Application"] = Relationship(
+        back_populates="registered_by"
     )
 
 
-class Aplicacion(BaseTable, table=True):
-    __tablename__ = "aplicacion"
+class Manager(BaseTable, UserPlainAttribute, table=True):
+    __tablename__ = "manager"
 
-    nombre: str
+    sensitive_data_id: UUID = Field(foreign_key="sensitive_data.id", unique=True)
+    is_active: bool = Field(default=True)
+
+    sensitive_data: SensitiveData = Relationship(back_populates="manager")
+    manager_services: list["ManagerService"] = Relationship(back_populates="manager")
+
+
+class User(BaseTable, UserPlainAttribute, table=True):
+    __tablename__ = "user"
+
+    sensitive_data_id: UUID = Field(foreign_key="sensitive_data.id", unique=True)
+    is_active: bool = Field(default=True)
+
+    sensitive_data: SensitiveData = Relationship(back_populates="user")
+    user_roles: list["UserRole"] = Relationship(back_populates="user")
+
+
+class Service(BaseTable, table=True):
+    __tablename__ = "service"
+
+    name: str = Field(unique=True)
+    description: str | None = None
+    administrator_id: UUID = Field(foreign_key="administrator.id")
+    is_active: bool = Field(default=True)
+
+    registered_by: Administrator = Relationship(back_populates="manager_services")
+    manager_services: list["ManagerService"] = Relationship(back_populates="service")
+    application_services: list["ApplicationService"] = Relationship(
+        back_populates="service"
+    )
+    device_services: list["DeviceService"] = Relationship(
+        back_populates="service"
+    )
+    roles: list["Role"] = Relationship(back_populates="service")
+    service_tickets: list["ServiceTicket"] = Relationship(back_populates="service")
+
+
+class ManagerService(BaseTable, table=True):
+    __tablename__ = "manager_service"
+
+    manager_id: UUID = Field(foreign_key="manager.id")
+    service_id: UUID = Field(foreign_key="service.id")
+
+    manager: Manager = Relationship(back_populates="manager_services")
+    service: Service = Relationship(back_populates="manager_services")
+    ecosystem_tickets: list["EcosystemTicket"] = Relationship(
+        back_populates="manager_service"
+    )
+
+
+class Application(BaseTable, table=True):
+    __tablename__ = "application"
+
+    name: str
     version: str | None = None
     url: str | None = None
-    descripcion: str | None = None
-    administrador_id: UUID = Field(foreign_key="administrador.id")
-    activo: bool = Field(default=True)
+    description: str | None = None
+    administrator_id: UUID = Field(foreign_key="administrator.id")
+    is_active: bool = Field(default=True)
 
-    registrada_por: Administrador = Relationship(
-        back_populates="aplicaciones_registradas"
+    registered_by: Administrator = Relationship(
+        back_populates="registered_applications"
     )
-    aplicacion_servicios: list["AplicacionServicio"] = Relationship(
-        back_populates="aplicacion"
+    application_services: list["ApplicationService"] = Relationship(
+        back_populates="application"
     )
 
 
-class AplicacionServicio(BaseTable, table=True):
-    __tablename__ = "aplicacion_servicio"
+class ApplicationService(BaseTable, table=True):
+    __tablename__ = "application_service"
 
-    aplicacion_id: UUID = Field(foreign_key="aplicacion.id")
-    servicio_id: UUID = Field(foreign_key="servicio.id")
+    application_id: UUID = Field(foreign_key="application.id")
+    service_id: UUID = Field(foreign_key="service.id")
 
-    aplicacion: Aplicacion = Relationship(back_populates="aplicacion_servicios")
-    servicio: Servicio = Relationship(back_populates="aplicacion_servicios")
+    application: Application = Relationship(back_populates="application_services")
+    service: Service = Relationship(back_populates="application_services")
 
 
-class Dispositivo(BaseTable, table=True):
-    __tablename__ = "dispositivo"
+class Device(BaseTable, table=True):
+    __tablename__ = "device"
 
-    nombre: str
-    marca: str | None = None
-    modelo: str | None = None
-    numero_serie: str | None = Field(default=None, unique=True)
+    name: str
+    brand: str | None = None
+    model: str | None = None
+    serial_number: str | None = Field(default=None, unique=True)
     ip: str | None = None
     mac: str | None = Field(default=None, unique=True)
-    activo: bool = Field(default=True)
+    is_active: bool = Field(default=True)
 
-    dispositivo_servicios: list["DispositivoServicio"] = Relationship(
-        back_populates="dispositivo"
+    device_services: list["DeviceService"] = Relationship(
+        back_populates="device"
     )
 
 
-class DispositivoServicio(BaseTable, table=True):
-    __tablename__ = "dispositivo_servicio"
+class DeviceService(BaseTable, table=True):
+    __tablename__ = "device_service"
 
-    dispositivo_id: UUID = Field(foreign_key="dispositivo.id")
-    servicio_id: UUID = Field(foreign_key="servicio.id")
+    device_id: UUID = Field(foreign_key="device.id")
+    service_id: UUID = Field(foreign_key="service.id")
 
-    dispositivo: Dispositivo = Relationship(back_populates="dispositivo_servicios")
-    servicio: Servicio = Relationship(back_populates="dispositivo_servicios")
-
-
-class Rol(BaseTable, table=True):
-    __tablename__ = "rol"
-
-    nombre: str
-    descripcion: str | None = None
-    servicio_id: UUID = Field(foreign_key="servicio.id")
-    activo: bool = Field(default=True)
-
-    servicio: Servicio = Relationship(back_populates="roles")
-    permiso: Optional["PermisoRol"] = Relationship(back_populates="rol")
-    usuario_roles: list["UsuarioRol"] = Relationship(back_populates="rol")
+    device: Device = Relationship(back_populates="device_services")
+    service: Service = Relationship(back_populates="device_services")
 
 
-class PermisoRol(BaseTable, table=True):
-    __tablename__ = "permiso_rol"
+class Role(BaseTable, table=True):
+    __tablename__ = "role"
 
-    rol_id: UUID = Field(foreign_key="rol.id", unique=True)
-    puede_leer: bool = Field(default=False)
-    puede_escribir: bool = Field(default=False)
-    puede_eliminar: bool = Field(default=False)
-    puede_administrar: bool = Field(default=False)
+    name: str
+    description: str | None = None
+    service_id: UUID = Field(foreign_key="service.id")
+    is_active: bool = Field(default=True)
 
-    rol: Rol = Relationship(back_populates="permiso")
+    service: Service = Relationship(back_populates="roles")
+    permission: Optional["RolePermission"] = Relationship(back_populates="role")
+    user_roles: list["UserRole"] = Relationship(back_populates="role")
 
 
-class UsuarioRol(BaseTable, table=True):
-    __tablename__ = "usuario_rol"
+class RolePermission(BaseTable, table=True):
+    __tablename__ = "role_permission"
 
-    usuario_id: UUID = Field(foreign_key="usuario.id")
-    rol_id: UUID = Field(foreign_key="rol.id")
+    role_id: UUID = Field(foreign_key="role.id", unique=True)
+    can_read: bool = Field(default=False)
+    can_write: bool = Field(default=False)
+    can_delete: bool = Field(default=False)
+    can_administer: bool = Field(default=False)
 
-    usuario: Usuario = Relationship(back_populates="usuario_roles")
-    rol: Rol = Relationship(back_populates="usuario_roles")
-    tickets_servicio: list["TicketServicio"] = Relationship(
-        back_populates="usuario_rol"
+    role: Role = Relationship(back_populates="permission")
+
+
+class UserRole(BaseTable, table=True):
+    __tablename__ = "user_role"
+
+    user_id: UUID = Field(foreign_key="user.id")
+    role_id: UUID = Field(foreign_key="role.id")
+
+    user: User = Relationship(back_populates="user_roles")
+    role: Role = Relationship(back_populates="user_roles")
+    service_tickets: list["ServiceTicket"] = Relationship(
+        back_populates="user_role"
     )
 
 
@@ -207,38 +210,38 @@ class TicketStatus(SQLModel, table=True):
     __tablename__ = "ticket_status"
 
     id: int | None = Field(default=None, primary_key=True)
-    nombre: str = Field(unique=True)
-    descripcion: str | None = None
+    name: str = Field(unique=True)
+    description: str | None = None
 
-    tickets_servicio: list["TicketServicio"] = Relationship(back_populates="status")
-    tickets_ecosistema: list["TicketEcosistema"] = Relationship(back_populates="status")
+    service_tickets: list["ServiceTicket"] = Relationship(back_populates="status")
+    ecosystem_tickets: list["EcosystemTicket"] = Relationship(back_populates="status")
 
 
-class TicketServicio(BaseTable, table=True):
-    __tablename__ = "ticket_servicio"
+class ServiceTicket(BaseTable, table=True):
+    __tablename__ = "service_ticket"
 
-    titulo: str
-    descripcion: str | None = None
-    usuario_rol_id: UUID = Field(foreign_key="usuario_rol.id")
+    title: str
+    description: str | None = None
+    user_role_id: UUID = Field(foreign_key="user_role.id")
     status_id: int = Field(foreign_key="ticket_status.id")
-    servicio_id: UUID = Field(foreign_key="servicio.id")
-    prioridad: str = Field(default="media")
+    service_id: UUID = Field(foreign_key="service.id")
+    priority: str = Field(default="medium")
 
-    usuario_rol: UsuarioRol = Relationship(back_populates="tickets_servicio")
-    status: TicketStatus = Relationship(back_populates="tickets_servicio")
-    servicio: Servicio = Relationship(back_populates="tickets_servicio")
+    user_role: UserRole = Relationship(back_populates="service_tickets")
+    status: TicketStatus = Relationship(back_populates="service_tickets")
+    service: Service = Relationship(back_populates="service_tickets")
 
 
-class TicketEcosistema(BaseTable, table=True):
-    __tablename__ = "ticket_ecosistema"
+class EcosystemTicket(BaseTable, table=True):
+    __tablename__ = "ecosystem_ticket"
 
-    titulo: str
-    descripcion: str | None = None
-    gerente_servicio_id: UUID = Field(foreign_key="gerente_servicio.id")
+    title: str
+    description: str | None = None
+    manager_service_id: UUID = Field(foreign_key="manager_service.id")
     status_id: int = Field(foreign_key="ticket_status.id")
-    prioridad: str = Field(default="media")
+    priority: str = Field(default="medium")
 
-    gerente_servicio: GerenteServicio = Relationship(
-        back_populates="tickets_ecosistema"
+    manager_service: ManagerService = Relationship(
+        back_populates="ecosystem_tickets"
     )
-    status: TicketStatus = Relationship(back_populates="tickets_ecosistema")
+    status: TicketStatus = Relationship(back_populates="ecosystem_tickets")
