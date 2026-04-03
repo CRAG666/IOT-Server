@@ -59,8 +59,16 @@ class BaseService(IBaseService[T, P_create, P_update], Generic[T, P_create, P_up
 
     def update_entity(self, id: UUID, payload: P_update) -> T:
         entity = self.get_by_id(id)
+
         for field, value in payload.model_dump(exclude_unset=True).items():
+            attr = getattr(type(entity), field, None)
+
+            # Si es una property sin setter (solo lectura), se omite.
+            if isinstance(attr, property) and attr.fset is None:
+                continue
+
             setattr(entity, field, value)
+
         return self.repository.update(entity)
 
     def delete_entity(self, id: UUID) -> bool:
