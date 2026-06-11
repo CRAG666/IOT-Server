@@ -1,13 +1,13 @@
-import os
 import sys
+from pathlib import Path
 from loguru import logger
 
-LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs")
-LOG_FILE = os.path.join(LOG_DIR, "iot-server-{time:YYYY-MM-DD}.log")
+LOG_DIR = Path(__file__).parent.parent.parent / "logs"
+LOG_FILE = LOG_DIR / "iot-server-{time:YYYY-MM-DD}.log"
 
 
 def init_logging(debug: bool = False) -> None:
-    os.makedirs(LOG_DIR, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     logger.remove()
 

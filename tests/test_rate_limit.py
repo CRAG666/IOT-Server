@@ -1,3 +1,4 @@
+from collections import defaultdict
 from types import SimpleNamespace
 
 import pytest
@@ -11,10 +12,10 @@ from app.shared.session.exceptions import RateLimitExceededException
 
 class InMemoryRateLimitRepository:
     def __init__(self):
-        self.counts: dict[str, int] = {}
+        self.counts: defaultdict[str, int] = defaultdict(int)
 
     async def increment_rate_limit(self, rate_limit_key: str, window_seconds: int = 1) -> int:
-        self.counts[rate_limit_key] = self.counts.get(rate_limit_key, 0) + 1
+        self.counts[rate_limit_key] += 1
         return self.counts[rate_limit_key]
 
     async def get_rate_limit_ttl(self, rate_limit_key: str) -> int:
@@ -29,8 +30,7 @@ def _build_request(
     tags: list[str],
     *,
     ip_address: str = "127.0.0.1",
-    account_id: str | None = None,
-) -> Request:
+    account_id: str | None = None) -> Request:
     scope = {
         "type": "http",
         "method": "POST",
@@ -58,20 +58,18 @@ def _find_route(path: str, method: str) -> APIRoute:
 
 def test_build_rate_limit_key_uses_route_tag_and_ip_address():
     request = _build_request(
-        "/api/v1/auth-rc/user/login",
-        ["Auth RC"],
-        ip_address="10.0.0.7",
-    )
+        "/api/v1/auth/login",
+        ["Auth"],
+        ip_address="10.0.0.7")
 
-    assert build_rate_limit_key(request) == "auth-rc:ip:10.0.0.7"
+    assert build_rate_limit_key(request) == "auth:ip:10.0.0.7"
 
 
 def test_build_rate_limit_key_uses_authenticated_account_when_present():
     request = _build_request(
         "/api/v1/users/",
         ["Users"],
-        account_id="user-123",
-    )
+        account_id="user-123")
 
     assert build_rate_limit_key(request) == "users:account:user-123"
 
@@ -79,10 +77,9 @@ def test_build_rate_limit_key_uses_authenticated_account_when_present():
 def test_rate_limit_blocks_fourth_request_in_same_group_and_subject():
     repository = InMemoryRateLimitRepository()
     request = _build_request(
-        "/api/v1/auth-rc/user/login",
-        ["Auth RC"],
-        ip_address="10.0.0.8",
-    )
+        "/api/v1/auth/login",
+        ["Auth"],
+        ip_address="10.0.0.8")
 
     for _ in range(3):
         import asyncio
@@ -103,13 +100,11 @@ def test_rate_limit_counts_are_isolated_by_authenticated_account():
     first_request = _build_request(
         "/api/v1/users/",
         ["Users"],
-        account_id="account-a",
-    )
+        account_id="account-a")
     second_request = _build_request(
         "/api/v1/users/",
         ["Users"],
-        account_id="account-b",
-    )
+        account_id="account-b")
 
     for _ in range(3):
         import asyncio
@@ -127,7 +122,7 @@ def test_rate_limit_counts_are_isolated_by_authenticated_account():
 
 
 def test_auth_routes_include_rate_limit_dependency():
-    route = _find_route("/api/v1/auth-rc/user/login", "POST")
+    route = _find_route("/api/v1/auth/login", "POST")
 
     dependency_calls = [dependency.call for dependency in route.dependant.dependencies]
 

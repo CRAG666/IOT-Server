@@ -3,7 +3,7 @@ from sqlmodel import Session
 
 VIEWS: dict[str, str] = {
     "device_manager_vw": """
-        CREATE VIEW IF NOT EXISTS device_manager_vw AS
+        CREATE OR REPLACE VIEW device_manager_vw AS
         SELECT DISTINCT
             d.id AS device_id,
             m.id AS manager_id
@@ -13,7 +13,7 @@ VIEWS: dict[str, str] = {
         JOIN manager m ON ms.manager_id = m.id
     """,
     "user_manager_vw": """
-        CREATE VIEW IF NOT EXISTS user_manager_vw AS
+        CREATE OR REPLACE VIEW user_manager_vw AS
         SELECT DISTINCT
             u.id AS user_id,
             m.id AS manager_id
@@ -24,7 +24,7 @@ VIEWS: dict[str, str] = {
         JOIN manager m ON ms.manager_id = m.id
     """,
     "service_manager_vw": """
-        CREATE VIEW IF NOT EXISTS service_manager_vw AS
+        CREATE OR REPLACE VIEW service_manager_vw AS
         SELECT DISTINCT
             s.id AS service_id,
             m.id AS manager_id
@@ -33,7 +33,7 @@ VIEWS: dict[str, str] = {
         JOIN manager m ON ms.manager_id = m.id
     """,
     "application_manager_vw": """
-        CREATE VIEW IF NOT EXISTS application_manager_vw AS
+        CREATE OR REPLACE VIEW application_manager_vw AS
         SELECT DISTINCT
             a.id AS application_id,
             m.id AS manager_id
@@ -43,7 +43,7 @@ VIEWS: dict[str, str] = {
         JOIN manager m ON ms.manager_id = m.id
     """,
     "ticket_manager_vw": """
-        CREATE VIEW IF NOT EXISTS ticket_manager_vw AS
+        CREATE OR REPLACE VIEW ticket_manager_vw AS
         SELECT DISTINCT
             et.id AS ticket_id,
             m.id AS manager_id
@@ -55,6 +55,10 @@ VIEWS: dict[str, str] = {
 
 
 def create_views(session: Session) -> None:
+    is_sqlite = session.bind.dialect.name == "sqlite"  # type: ignore[union-attr]
     for view_name, view_sql in VIEWS.items():
+        if is_sqlite:
+            session.exec(text(f"DROP VIEW IF EXISTS {view_name}"))
+            view_sql = view_sql.replace("CREATE OR REPLACE VIEW", "CREATE VIEW")
         session.exec(text(view_sql))
     session.commit()

@@ -1,0 +1,62 @@
+### List applications
+# @expect 200
+GET /api/v1/applications/
+
+### Create application (requires administrator_id captured earlier)
+# @expect 201
+# @capture new_app_id $.id
+# @capture new_app_key $.api_key
+# @assert $.name E2EApp
+# @assert $.is_active true
+POST /api/v1/applications/
+
+{
+  "name": "E2EApp",
+  "version": "1.0.0",
+  "url": "https://e2e.iotmx.test",
+  "description": "E2E test application",
+  "administrator_id": "{{new_admin_id}}"
+}
+
+### Get application by ID
+# @expect 200
+# @assert $.id {{new_app_id}}
+# @assert $.name E2EApp
+# @assert $.version 1.0.0
+GET /api/v1/applications/{{new_app_id}}
+
+### Update application version
+# @expect 200
+# @assert $.version 2.0.0
+PATCH /api/v1/applications/{{new_app_id}}
+
+{"version": "2.0.0"}
+
+### Restore version
+# @expect 200
+# @assert $.version 1.0.0
+PATCH /api/v1/applications/{{new_app_id}}
+
+{"version": "1.0.0"}
+
+### Deactivate application
+# @expect 200
+# @assert $.is_active false
+PATCH /api/v1/applications/{{new_app_id}}
+
+{"is_active": false}
+
+### Reactivate application
+# @expect 200
+# @assert $.is_active true
+PATCH /api/v1/applications/{{new_app_id}}
+
+{"is_active": true}
+
+### Get non-existent application — 404
+# @expect 404
+GET /api/v1/applications/00000000-0000-0000-0000-000000000004
+
+### List applications with pagination
+# @expect 200
+GET /api/v1/applications/?offset=0&limit=10

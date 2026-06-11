@@ -1,0 +1,63 @@
+### Cleanup: delete service ticket
+# @expect 204
+DELETE /api/v1/tickets/service/{{new_svc_ticket_id}}
+
+### Cleanup: delete ecosystem ticket
+# @expect 204
+DELETE /api/v1/tickets/ecosystem/{{new_eco_ticket_id}}
+
+### Cleanup: delete payment
+# @expect 204
+DELETE /api/v1/payments/{{new_payment_id}}
+
+### Cleanup: unassign user from service
+# @expect 204
+DELETE /api/v1/payments/user-services/{{new_user_id}}/{{new_service_id}}
+
+### Cleanup: delete subscription type
+# @expect 204
+DELETE /api/v1/payments/subscription-types/{{new_sub_type_id}}
+
+### Cleanup: remove user from role (via role endpoint)
+# @expect 204
+DELETE /api/v1/roles/{{new_role_id}}/users/{{new_user_id}}
+
+### Cleanup: delete role
+# @expect 204
+DELETE /api/v1/roles/{{new_role_id}}
+
+### Cleanup: unassign application from service
+# @expect 204
+DELETE /api/v1/services/{{new_service_id}}/applications/{{new_app_id}}
+
+### Cleanup: unassign device from service
+# @expect 204
+DELETE /api/v1/services/{{new_service_id}}/devices/{{new_device_id}}
+
+### Cleanup: unassign manager from service
+# @expect 204
+DELETE /api/v1/services/{{new_service_id}}/managers/{{new_manager_id}}
+
+### Cleanup: delete service
+# @expect 204
+DELETE /api/v1/services/{{new_service_id}}
+
+### Cleanup: delete application
+# @expect 204
+DELETE /api/v1/applications/{{new_app_id}}
+
+### Cleanup: delete device
+# @expect 204
+DELETE /api/v1/devices/{{new_device_id}}
+
+### Cleanup: delete user
+# @expect 204
+DELETE /api/v1/users/{{new_user_id}}
+
+### Cleanup: delete manager
+# @expect 204
+DELETE /api/v1/managers/{{new_manager_id}}
+
+### Cleanup: delete administrator (created during test suite)
+# @expect 204
+DELETE /api/v1/administrators/{{new_admin_id}}

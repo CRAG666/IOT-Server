@@ -1,0 +1,11 @@
+### Health check
+# @public
+# @expect 200
+# @assert $.status ok
+GET /health
+
+### Readiness check
+# @public
+# @expect 200
+# @assert $.status ready
+GET /ready

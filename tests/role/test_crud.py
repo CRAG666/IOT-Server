@@ -1,59 +1,43 @@
 """Tests para la entidad Role — CRUD API, validación de esquemas y asignaciones UserRole."""
 import pytest
-import jwt
-from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from app.config import settings
 from app.domain.role.schemas import RoleCreate, RoleUpdate
 
 
-def create_token(account_data: dict) -> str:
-    to_encode = {
-        "sub": str(account_data["id"]),
-        "email": account_data["email"],
-        "type": account_data["account_type"],
-        "is_master": account_data["is_master"],
-    }
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    to_encode.update({"exp": expire})
-    return jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-    )
+# ── Fixtures ────────────────────────────────────────────────────────
 
 
-def create_service_via_api(
-    client,
-    master_admin_account: dict,
-    name: str = "Svc Role Test",
-) -> str:
-    resp = client.post(
+@pytest.fixture
+def service_id(master_admin_client):
+    resp = master_admin_client.post(
         "/api/v1/services",
         json={
-            "name": name,
+            "name": "Svc Role Test",
             "description": "Fixture service for roles",
-            "administrator_id": str(master_admin_account["id"]),
-        },
-    )
+            "administrator_id": str(master_admin_client.account['id']),
+        })
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
 
 
 @pytest.fixture
-def service_id(client, master_admin_account):
-    return create_service_via_api(client, master_admin_account)
+def role_id(master_admin_client, service_id):
+    resp = master_admin_client.post(
+        "/api/v1/roles",
+        json={"name": "Operador", "service_id": service_id})
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+# ── Tests: Schema validation ─────────────────────────────────────────
 
 
 class TestRoleSchemaValidation:
     def test_create_accepts_unicode_letters_only(self):
         payload = RoleCreate(
             name="OperadorÓ",
-            service_id="00000000-0000-0000-0000-000000000001",
-        )
+            service_id="00000000-0000-0000-0000-000000000001")
         assert payload.name == "OperadorÓ"
 
     def test_create_rejects_digit_in_name(self):
@@ -70,24 +54,19 @@ class TestRoleSchemaValidation:
             RoleUpdate(name="_bad")
 
 
+# ── Tests: CRUD ──────────────────────────────────────────────────────
+
+
 class TestRoleCreateApi:
-    def test_create_role_success_master_admin(
-        self,
-        client,
-        master_admin_account,
-        service_id,
-    ):
-        token = create_token(master_admin_account)
-        response = client.post(
+    def test_create_role_success_master_admin(self, master_admin_client, service_id):
+        response = master_admin_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {token}"},
             json={
                 "name": "Moderador",
                 "description": "Gestión de contenido",
                 "service_id": service_id,
                 "is_active": True,
-            },
-        )
+            })
         assert response.status_code == 201, response.text
         data = response.json()
         assert data["name"] == "Moderador"
@@ -97,39 +76,16 @@ class TestRoleCreateApi:
         assert "id" in data
         assert "created_at" in data
 
-    def test_create_role_invalid_name_returns_422(
-        self,
-        client,
-        master_admin_account,
-        service_id,
-    ):
-        token = create_token(master_admin_account)
-        response = client.post(
+    def test_create_role_invalid_name_returns_422(self, master_admin_client, service_id):
+        response = master_admin_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "name": "Rol-ConGuion",
-                "service_id": service_id,
-            },
-        )
+            json={"name": "Rol-ConGuion", "service_id": service_id})
         assert response.status_code == 422
 
-    def test_create_role_extra_fields_forbidden(
-        self,
-        client,
-        master_admin_account,
-        service_id,
-    ):
-        token = create_token(master_admin_account)
-        response = client.post(
+    def test_create_role_extra_fields_forbidden(self, master_admin_client, service_id):
+        response = master_admin_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "name": "Moderadorextra",
-                "service_id": service_id,
-                "unexpected": True,
-            },
-        )
+            json={"name": "Moderadorextra", "service_id": service_id, "unexpected": True})
         assert response.status_code == 422
 
 
@@ -138,286 +94,130 @@ class TestRoleListRetrieveApi:
         response = client.get("/api/v1/roles")
         assert response.status_code == 401
 
-    def test_list_roles_user_allowed(
-        self,
-        client,
-        user_account,
-        master_admin_account,
-        service_id,
-    ):
-        token_admin = create_token(master_admin_account)
-        client.post(
+    def test_list_roles_user_not_allowed(self, master_admin_client, user_client, service_id):
+        master_admin_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {token_admin}"},
-            json={"name": "Lector", "service_id": service_id},
-        )
-
-        token = create_token(user_account)
-        response = client.get(
-            "/api/v1/roles",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 200
-        assert response.json()["total"] >= 1
+            json={"name": "Lector", "service_id": service_id})
+        response = user_client.get("/api/v1/roles")
+        assert response.status_code == 403
 
 
 class TestRoleAuthorizationApi:
-    def test_user_cannot_create_role(self, client, user_account, service_id):
-        token = create_token(user_account)
-        response = client.post(
+    def test_user_cannot_create_role(self, user_client, service_id):
+        response = user_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "name": "Forbidden",
-                "service_id": service_id,
-            },
-        )
+            json={"name": "Forbidden", "service_id": service_id})
         assert response.status_code == 403
 
-    def test_manager_can_create_role(
-        self,
-        client,
-        manager_account,
-        master_admin_account,
-        service_id,
-    ):
-        token = create_token(manager_account)
-        response = client.post(
+    def test_manager_cannot_create_role(self, manager_client, service_id):
+        response = manager_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "name": "Encargado",
-                "service_id": service_id,
-            },
-        )
-        assert response.status_code == 201, response.text
+            json={"name": "Encargado", "service_id": service_id})
+        assert response.status_code == 403
 
-    def test_manager_delete_forbidden(
-        self,
-        client,
-        manager_account,
-        master_admin_account,
-        service_id,
-    ):
-        admin_tok = create_token(master_admin_account)
-        create_resp = client.post(
+    def test_manager_cannot_delete_role(self, master_admin_client, manager_client, service_id):
+        create_resp = master_admin_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {admin_tok}"},
-            json={"name": "ParaBorrar", "service_id": service_id},
-        )
+            json={"name": "ParaBorrar", "service_id": service_id})
         assert create_resp.status_code == 201
         role_id = create_resp.json()["id"]
 
-        mgr_tok = create_token(manager_account)
-        response = client.delete(
-            f"/api/v1/roles/{role_id}",
-            headers={"Authorization": f"Bearer {mgr_tok}"},
-        )
+        response = manager_client.delete(f"/api/v1/roles/{role_id}")
         assert response.status_code == 403
 
-    def test_regular_admin_can_delete_role(
-        self,
-        client,
-        regular_admin_account,
-        master_admin_account,
-        service_id,
-    ):
-        admin_master_tok = create_token(master_admin_account)
-        create_resp = client.post(
+    def test_regular_admin_cannot_delete_role(
+            self, master_admin_client, regular_admin_client, service_id):
+        create_resp = master_admin_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {admin_master_tok}"},
-            json={"name": "BorradoAdminRegular", "service_id": service_id},
-        )
+            json={"name": "BorradoAdminRegular", "service_id": service_id})
         role_id = create_resp.json()["id"]
 
-        reg_tok = create_token(regular_admin_account)
-        response = client.delete(
-            f"/api/v1/roles/{role_id}",
-            headers={"Authorization": f"Bearer {reg_tok}"},
-        )
-        assert response.status_code == 204
+        response = regular_admin_client.delete(f"/api/v1/roles/{role_id}")
+        assert response.status_code == 403
 
 
 class TestRoleUpdateDeleteApi:
-    def test_patch_role_regular_admin(
-        self,
-        client,
-        master_admin_account,
-        regular_admin_account,
-        service_id,
-    ):
-        master_tok = create_token(master_admin_account)
-        create_resp = client.post(
+    def test_regular_admin_cannot_patch_role(
+            self, master_admin_client, regular_admin_client, service_id):
+        create_resp = master_admin_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {master_tok}"},
-            json={
-                "name": "NombreInicial",
-                "description": "d",
-                "service_id": service_id,
-            },
-        )
+            json={"name": "NombreInicial", "description": "d", "service_id": service_id})
         role_id = create_resp.json()["id"]
 
-        reg_tok = create_token(regular_admin_account)
-        response = client.patch(
+        response = regular_admin_client.patch(
             f"/api/v1/roles/{role_id}",
-            headers={"Authorization": f"Bearer {reg_tok}"},
-            json={"description": None, "is_active": False},
-        )
-        assert response.status_code == 200
-        body = response.json()
-        assert body["is_active"] is False
+            json={"description": None, "is_active": False})
+        assert response.status_code == 403
 
-    def test_get_role_not_found(self, client, master_admin_account):
-        token = create_token(master_admin_account)
-        response = client.get(
-            f"/api/v1/roles/{uuid4()}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+    def test_get_role_not_found(self, master_admin_client):
+        response = master_admin_client.get(f"/api/v1/roles/{uuid4()}")
         assert response.status_code == 404
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers para UserRole
-# ─────────────────────────────────────────────────────────────────────────────
-
-def create_role_via_api(client, account: dict, service_id: str, name: str) -> str:
-    token = create_token(account)
-    resp = client.post(
-        "/api/v1/roles",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"name": name, "service_id": service_id},
-    )
-    assert resp.status_code == 201, resp.text
-    return resp.json()["id"]
+# ── Tests: UserRole ───────────────────────────────────────────────────
 
 
 class TestUserRoleAssignApi:
     """POST /roles/{role_id}/users — asignar usuario a rol."""
 
-    def test_manager_can_assign_user_to_role(
-        self, client, manager_account, master_admin_account, user_account, service_id
-    ):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Operador")
-        token = create_token(manager_account)
-
-        response = client.post(
+    def test_admin_can_assign_user_to_role(
+            self, master_admin_client, user_client, role_id):
+        response = master_admin_client.post(
             f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"user_id": str(user_account["id"])},
-        )
+            json={"user_id": str(user_client.account['id'])})
         assert response.status_code == 201, response.text
         data = response.json()
-        assert data["user_id"] == str(user_account["id"])
+        assert data["user_id"] == str(user_client.account['id'])
         assert data["role_id"] == role_id
         assert "id" in data
         assert "created_at" in data
 
-    def test_admin_can_assign_user_to_role(
-        self, client, regular_admin_account, master_admin_account, user_account, service_id
-    ):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Supervisor")
-        token = create_token(regular_admin_account)
-
-        response = client.post(
+    def test_user_cannot_assign_role(self, user_client, role_id):
+        response = user_client.post(
             f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"user_id": str(user_account["id"])},
-        )
-        assert response.status_code == 201, response.text
-
-    def test_user_cannot_assign_role(
-        self, client, user_account, master_admin_account, service_id
-    ):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Visitante")
-        token = create_token(user_account)
-
-        response = client.post(
-            f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"user_id": str(user_account["id"])},
-        )
+            json={"user_id": str(user_client.account['id'])})
         assert response.status_code == 403
 
     def test_duplicate_assignment_returns_409(
-        self, client, manager_account, master_admin_account, user_account, service_id
-    ):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Auditor")
-        token = create_token(manager_account)
-        payload = {"user_id": str(user_account["id"])}
-
-        client.post(
-            f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {token}"},
-            json=payload,
-        )
-        response = client.post(
-            f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {token}"},
-            json=payload,
-        )
+            self, master_admin_client, user_client, role_id):
+        payload = {"user_id": str(user_client.account['id'])}
+        master_admin_client.post(f"/api/v1/roles/{role_id}/users", json=payload)
+        response = master_admin_client.post(f"/api/v1/roles/{role_id}/users", json=payload)
         assert response.status_code == 409
 
-    def test_assign_nonexistent_user_returns_404(
-        self, client, manager_account, master_admin_account, service_id
-    ):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Inspector")
-        token = create_token(manager_account)
-
-        response = client.post(
+    def test_assign_nonexistent_user_returns_404(self, master_admin_client, role_id):
+        response = master_admin_client.post(
             f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"user_id": str(uuid4())},
-        )
+            json={"user_id": str(uuid4())})
         assert response.status_code == 404
 
     def test_assign_to_nonexistent_role_returns_404(
-        self, client, manager_account, user_account
-    ):
-        token = create_token(manager_account)
-
-        response = client.post(
+            self, master_admin_client, user_client):
+        response = master_admin_client.post(
             f"/api/v1/roles/{uuid4()}/users",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"user_id": str(user_account["id"])},
-        )
+            json={"user_id": str(user_client.account['id'])})
         assert response.status_code == 404
 
 
 class TestUserRoleListApi:
     """GET /roles/{role_id}/users — listar asignaciones."""
 
-    def test_user_can_list_assigned_users(
-        self, client, manager_account, master_admin_account, user_account, service_id
-    ):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Revisor")
-        mgr_tok = create_token(manager_account)
-        client.post(
+    def test_admin_can_list_assigned_users(
+            self, master_admin_client, user_client, role_id):
+        master_admin_client.post(
             f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {mgr_tok}"},
-            json={"user_id": str(user_account["id"])},
-        )
-
-        user_tok = create_token(user_account)
-        response = client.get(
-            f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {user_tok}"},
-        )
+            json={"user_id": str(user_client.account['id'])})
+        response = master_admin_client.get(f"/api/v1/roles/{role_id}/users")
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
-        assert any(item["user_id"] == str(user_account["id"]) for item in data)
+        assert any(item["user_id"] == str(user_client.account['id']) for item in data)
 
-    def test_list_users_role_not_found(self, client, master_admin_account):
-        token = create_token(master_admin_account)
-        response = client.get(
-            f"/api/v1/roles/{uuid4()}/users",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+    def test_list_users_role_not_found(self, master_admin_client):
+        response = master_admin_client.get(f"/api/v1/roles/{uuid4()}/users")
         assert response.status_code == 404
 
-    def test_list_requires_auth(self, client, master_admin_account, service_id):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Tecnico")
+    def test_list_requires_auth(self, client, role_id):
         response = client.get(f"/api/v1/roles/{role_id}/users")
         assert response.status_code == 401
 
@@ -425,50 +225,26 @@ class TestUserRoleListApi:
 class TestUserRoleRemoveApi:
     """DELETE /roles/{role_id}/users/{user_id} — quitar usuario de rol."""
 
-    def test_manager_can_remove_user_from_role(
-        self, client, manager_account, master_admin_account, user_account, service_id
-    ):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Coordinador")
-        token = create_token(manager_account)
-
-        client.post(
+    def test_admin_can_remove_user_from_role(
+            self, master_admin_client, user_client, role_id):
+        master_admin_client.post(
             f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"user_id": str(user_account["id"])},
-        )
-
-        response = client.delete(
-            f"/api/v1/roles/{role_id}/users/{user_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"user_id": str(user_client.account['id'])})
+        response = master_admin_client.delete(
+            f"/api/v1/roles/{role_id}/users/{user_client.account['id']}")
         assert response.status_code == 204
 
     def test_user_cannot_remove_assignment(
-        self, client, manager_account, master_admin_account, user_account, service_id
-    ):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Delegado")
-        mgr_tok = create_token(manager_account)
-        client.post(
+            self, master_admin_client, user_client, role_id):
+        master_admin_client.post(
             f"/api/v1/roles/{role_id}/users",
-            headers={"Authorization": f"Bearer {mgr_tok}"},
-            json={"user_id": str(user_account["id"])},
-        )
-
-        user_tok = create_token(user_account)
-        response = client.delete(
-            f"/api/v1/roles/{role_id}/users/{user_account['id']}",
-            headers={"Authorization": f"Bearer {user_tok}"},
-        )
+            json={"user_id": str(user_client.account['id'])})
+        response = user_client.delete(
+            f"/api/v1/roles/{role_id}/users/{user_client.account['id']}")
         assert response.status_code == 403
 
     def test_remove_nonexistent_assignment_returns_404(
-        self, client, manager_account, master_admin_account, user_account, service_id
-    ):
-        role_id = create_role_via_api(client, master_admin_account, service_id, "Gestor")
-        token = create_token(manager_account)
-
-        response = client.delete(
-            f"/api/v1/roles/{role_id}/users/{user_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            self, master_admin_client, user_client, role_id):
+        response = master_admin_client.delete(
+            f"/api/v1/roles/{role_id}/users/{user_client.account['id']}")
         assert response.status_code == 404

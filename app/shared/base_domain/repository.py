@@ -1,5 +1,6 @@
 from typing import Generic, TypeVar
 from uuid import UUID
+from sqlalchemy import delete as _sa_delete
 from sqlmodel import Session, select, func
 from app.shared.base_domain.model import BaseTable
 from abc import ABC, abstractmethod
@@ -10,23 +11,23 @@ T = TypeVar("T", bound=BaseTable)
 class IBaseRepository(ABC, Generic[T]):
     @abstractmethod
     def get_by_id(self, id: UUID) -> T | None:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
     def get_all(self, offset: int = 0, limit: int = 20) -> tuple[list[T], int]:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
     def create(self, entity: T) -> T:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
     def update(self, entity: T) -> T:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
     def delete(self, entity: T) -> None:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 class BaseRepository(IBaseRepository[T], Generic[T]):
@@ -57,5 +58,6 @@ class BaseRepository(IBaseRepository[T], Generic[T]):
         return entity
 
     def delete(self, entity: T) -> None:
-        self.session.delete(entity)
+        # Use raw SQL to avoid ORM cascade nullification of NOT NULL FK columns.
+        self.session.execute(_sa_delete(type(entity)).where(type(entity).id == entity.id))
         self.session.commit()

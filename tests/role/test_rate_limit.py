@@ -3,142 +3,128 @@
 Límite configurado: 3 peticiones por segundo por IP.
 """
 import time
-import jwt
 import pytest
-from datetime import datetime, timedelta, timezone
+import fakeredis
 
-from app.config import settings
-from app.shared.rate_limit import _windows
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def create_token(account_data: dict) -> str:
-    to_encode = {
-        "sub": str(account_data["id"]),
-        "email": account_data["email"],
-        "type": account_data["account_type"],
-        "is_master": account_data["is_master"],
-    }
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+from app.main import app
+from app.shared.rate_limit import get_rate_limit_repository
 
 
-@pytest.fixture(autouse=True)
-def reset_rate_limit_state():
-    """Limpia el estado global del rate limiter antes y después de cada test."""
-    _windows.clear()
-    yield
-    _windows.clear()
+
+class _FakeRateLimitRepo:
+    """Valkey-compatible rate limit repository backed by fakeredis."""
+
+    def __init__(self):
+        self._client = fakeredis.FakeAsyncValkey()
+
+    async def increment_rate_limit(self, key: str, window_seconds: int = 900) -> int:
+        rate_key = f"rate_limit:{key}"
+        count = await self._client.incr(rate_key)
+        if count == 1:
+            await self._client.expire(rate_key, int(window_seconds))
+        return count
+
+    async def get_rate_limit_ttl(self, key: str) -> int:
+        rate_key = f"rate_limit:{key}"
+        ttl = await self._client.ttl(rate_key)
+        return max(int(ttl), 0)
+
+    async def close(self) -> None:
+        await self._client.aclose()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Tests
-# ─────────────────────────────────────────────────────────────────────────────
+@pytest.fixture
+def fake_rate_repo():
+    """Provide a fresh fakeredis-backed rate limit repo and wire it into the app."""
+    repo = _FakeRateLimitRepo()
+    app.dependency_overrides[get_rate_limit_repository] = lambda: repo
+    yield repo
+    app.dependency_overrides.pop(get_rate_limit_repository, None)
+
 
 class TestRoleRateLimit:
 
-    def test_first_three_requests_are_allowed(self, client, master_admin_account):
+    def test_first_three_requests_are_allowed(self, master_admin_client, fake_rate_repo):
         """Las 3 primeras peticiones deben pasar."""
-        token = create_token(master_admin_account)
         for _ in range(3):
-            resp = client.get(
-                "/api/v1/roles",
-                headers={"Authorization": f"Bearer {token}"},
-            )
+            resp = master_admin_client.get(
+                "/api/v1/roles")
             assert resp.status_code == 200
 
-    def test_fourth_request_returns_429(self, client, master_admin_account):
+    def test_fourth_request_returns_429(self, master_admin_client, fake_rate_repo):
         """La 4ª petición en el mismo segundo debe devolver 429."""
-        token = create_token(master_admin_account)
         for _ in range(3):
-            client.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
+            master_admin_client.get("/api/v1/roles")
 
-        resp = client.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
+        resp = master_admin_client.get("/api/v1/roles")
         assert resp.status_code == 429
 
-    def test_429_has_retry_after_header(self, client, master_admin_account):
+    def test_429_has_retry_after_header(self, master_admin_client, fake_rate_repo):
         """La respuesta 429 debe incluir Retry-After: 1."""
-        token = create_token(master_admin_account)
         for _ in range(3):
-            client.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
+            master_admin_client.get("/api/v1/roles")
 
-        resp = client.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
+        resp = master_admin_client.get("/api/v1/roles")
         assert resp.status_code == 429
         assert "Retry-After" in resp.headers
         assert resp.headers["Retry-After"] == "1"
 
-    def test_rate_limit_resets_after_window_expires(self, client, master_admin_account):
+    def test_rate_limit_resets_after_window_expires(self, master_admin_client, fake_rate_repo):
         """Después de 1 segundo la cuota se reinicia."""
-        token = create_token(master_admin_account)
         for _ in range(3):
-            client.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
+            master_admin_client.get("/api/v1/roles")
 
-        assert client.get(
-            "/api/v1/roles", headers={"Authorization": f"Bearer {token}"}
+        assert master_admin_client.get(
+            "/api/v1/roles"
         ).status_code == 429
 
         time.sleep(1.1)
 
-        resp = client.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
+        resp = master_admin_client.get("/api/v1/roles")
         assert resp.status_code == 200
 
     def test_rate_limit_applies_across_different_role_routes(
-        self, client, master_admin_account
+        self, master_admin_client, fake_rate_repo
     ):
         """El límite es compartido entre todas las rutas de /roles."""
-        token = create_token(master_admin_account)
 
-        # Crear un servicio primero para poder crear un role
-        svc_resp = client.post(
+        svc_resp = master_admin_client.post(
             "/api/v1/services",
-            headers={"Authorization": f"Bearer {token}"},
             json={
                 "name": "RateLimitSvc",
                 "description": "Fixture",
-                "administrator_id": str(master_admin_account["id"]),
-            },
-        )
+                "administrator_id": str(master_admin_client.account['id']),
+            })
         assert svc_resp.status_code == 201
         service_id = svc_resp.json()["id"]
 
-        role_resp = client.post(
+        role_resp = master_admin_client.post(
             "/api/v1/roles",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "RateLimitRole", "service_id": service_id},
-        )
+            json={"name": "RateLimitRole", "service_id": service_id})
         assert role_resp.status_code == 201
         role_id = role_resp.json()["id"]
 
-        # Reiniciamos el contador para aislar el escenario
-        _windows.clear()
+        # These 3 GETs are /roles scope requests 2, 3, 4 (POST counted as 1)
+        master_admin_client.get("/api/v1/roles")
+        master_admin_client.get(f"/api/v1/roles/{role_id}")
 
-        client.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
-        client.get(f"/api/v1/roles/{role_id}", headers={"Authorization": f"Bearer {token}"})
-        client.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
-
-        # La 4ª petición a cualquier ruta de /roles debe ser rechazada
-        resp = client.get(f"/api/v1/roles/{role_id}", headers={"Authorization": f"Bearer {token}"})
+        # 4th /roles request should be rejected
+        resp = master_admin_client.get("/api/v1/roles")
         assert resp.status_code == 429
 
-    def test_role_limit_does_not_affect_managers_endpoint(self, client, master_admin_account):
+    def test_role_limit_does_not_affect_managers_endpoint(self, master_admin_client, fake_rate_repo):
         """Agotar el límite de /roles no debe bloquear /managers."""
-        token = create_token(master_admin_account)
         for _ in range(3):
-            client.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
+            master_admin_client.get("/api/v1/roles")
 
-        assert client.get(
-            "/api/v1/roles", headers={"Authorization": f"Bearer {token}"}
+        assert master_admin_client.get(
+            "/api/v1/roles"
         ).status_code == 429
 
-        # /managers tiene su propio contador
-        resp = client.get("/api/v1/managers", headers={"Authorization": f"Bearer {token}"})
+        resp = master_admin_client.get("/api/v1/managers")
         assert resp.status_code == 200
 
-    def test_unauthenticated_requests_consume_quota(self, client):
+    def test_unauthenticated_requests_consume_quota(self, client, fake_rate_repo):
         """Las peticiones sin token también consumen cuota."""
         for _ in range(3):
             resp = client.get("/api/v1/roles")

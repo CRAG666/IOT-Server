@@ -1,0 +1,7 @@
+# Placeholder — generate with:
+#   docker run --rm eclipse-mosquitto:2 mosquitto_passwd -b /tmp/passwd bridge changeme
+#   docker run --rm eclipse-mosquitto:2 mosquitto_passwd -b /tmp/passwd device1 changeme
+# Then copy the file here.
+# The bridge user needs subscribe access to iot/#
+# Device users need publish access to iot/<device_id>/telemetry
+bridge:$7$101$placeholder$replace-this-with-real-hash

@@ -1,38 +1,34 @@
 """Shared fixtures for session tests."""
 
 import pytest
-import valkey.asyncio as valkey
+import fakeredis
 
 from app.shared.session.repository import SessionRepository
 from app.shared.session.service import SessionService
 
-
-VALKEY_TEST_URL = "valkey://localhost:6379/1"
+TEST_ENCRYPTION_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 
 
 @pytest.fixture
 async def valkey_client():
-    """Create Valkey client for tests."""
-    client = await valkey.from_url(
-        VALKEY_TEST_URL,
-        encoding="utf-8",
-        decode_responses=True,
-    )
+    """Fakeredis-backed Valkey client for tests (no real Valkey needed)."""
+    client = fakeredis.FakeAsyncValkey(decode_responses=True)
     yield client
-    await client.flushdb()
+    await client.flushall()
     await client.aclose()
 
 
 @pytest.fixture
 async def repository(valkey_client):
-    """Create session repository."""
-    repo = SessionRepository(VALKEY_TEST_URL)
-    await repo.connect()
+    """Session repository with injected fakeredis client."""
+    repo = SessionRepository("valkey://localhost:6379/1")
+    repo.client = valkey_client
     yield repo
-    await repo.close()
 
 
 @pytest.fixture
 async def session_service(repository):
-    """Create session service."""
-    return SessionService()
+    """Session service with injected fake repository."""
+    svc = SessionService(encryption_key=TEST_ENCRYPTION_KEY)
+    svc._repository = repository
+    return svc

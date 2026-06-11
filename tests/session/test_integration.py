@@ -1,11 +1,8 @@
 """
-Integration tests for Session module using real Valkey instance.
+Integration tests for Session module using fakeredis.
 
-IMPORTANT: These tests require Docker services running:
-    docker-compose up -d valkey
-
-These tests validate:
-- SessionRepository operations against real Valkey
+Tests validate:
+- SessionRepository operations
 - SessionService complete workflows
 - Token encryption/decryption flows
 - Session lifecycle management
@@ -15,8 +12,8 @@ import asyncio
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import fakeredis
 import pytest
-import valkey.asyncio as valkey
 
 from app.shared.session.models import SessionData
 from app.shared.session.repository import SessionRepository
@@ -24,44 +21,31 @@ from app.shared.session.security import JWEHandler
 from app.shared.session.service import SessionService
 
 
-# Test configuration
-VALKEY_TEST_URL = "valkey://localhost:6379/1"  # Use DB 1 for tests
-# Valid base64 AES-256 key (32 bytes): b'0123456789abcdef0123456789abcdef'
 TEST_ENCRYPTION_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 
 
 @pytest.fixture(scope="function")
 async def valkey_client():
-    """Create a Valkey client for direct operations and cleanup."""
-    client = await valkey.from_url(
-        VALKEY_TEST_URL,
-        encoding="utf-8",
-        decode_responses=True,
-    )
+    client = fakeredis.FakeAsyncValkey(decode_responses=True)
     yield client
-    # Cleanup: flush test database after each test
-    await client.flushdb()
+    await client.flushall()
     await client.aclose()
 
 
 @pytest.fixture(scope="function")
 async def repository(valkey_client):
-    """Create SessionRepository instance."""
-    repo = SessionRepository(VALKEY_TEST_URL)
-    await repo.connect()
+    repo = SessionRepository("valkey://localhost:6379/1")
+    repo.client = valkey_client
     yield repo
-    await repo.close()
 
 
 @pytest.fixture(scope="function")
 async def service(valkey_client):
-    """Create SessionService instance."""
-    svc = SessionService(
-        valkey_url=VALKEY_TEST_URL,
-        encryption_key=TEST_ENCRYPTION_KEY,
-    )
+    svc = SessionService(encryption_key=TEST_ENCRYPTION_KEY)
+    repo = SessionRepository("valkey://localhost:6379/1")
+    repo.client = valkey_client
+    svc._repository = repo
     yield svc
-    await svc.close()
 
 
 @pytest.fixture
@@ -78,8 +62,7 @@ def sample_session_data():
         ip_address="127.0.0.1",
         user_agent="Test Agent",
         created_at=now,
-        last_activity=now,
-    )
+        last_activity=now)
 
 
 # ==================== SessionRepository Tests ====================
@@ -236,8 +219,7 @@ class TestSessionServiceIntegration:
         tokens = await service.create_session_with_tokens(
             user_id=user_id,
             claims=claims,
-            request_info=request_info,
-        )
+            request_info=request_info)
         
         # Verify tokens structure
         assert tokens.access_token is not None

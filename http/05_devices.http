@@ -1,0 +1,66 @@
+# =============================================================================
+# IoTmx API — Devices
+# Required role: administrator/manager (read/write), administrator (delete)
+#
+# Login first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url   = http://localhost:8000
+@session_id = REPLACE_WITH_SESSION_ID
+@device_id  = REPLACE_WITH_DEVICE_UUID
+
+
+### List all devices
+# e2e.py: uv run python http/e2e.py get "/api/v1/devices?offset=0&limit=20"
+GET {{base_url}}/api/v1/devices?offset=0&limit=20
+X-Session-ID: {{session_id}}
+
+###
+
+### Get device by ID
+# e2e.py: uv run python http/e2e.py get /api/v1/devices/{{device_id}}
+GET {{base_url}}/api/v1/devices/{{device_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Create device
+# Required: name. All others optional.
+# e2e.py: uv run python http/e2e.py post /api/v1/devices \
+#   '{"name":"Sensor-001","brand":"Bosch","model":"BME280","serial_number":"SN-12345","ip":"192.168.1.50","mac":"AA:BB:CC:DD:EE:FF"}'
+#
+# Plaintext body shape:
+# {
+#   "name":          "Sensor-001",       // required
+#   "brand":         "Bosch",            // optional
+#   "model":         "BME280",           // optional
+#   "serial_number": "SN-12345",         // optional
+#   "ip":            "192.168.1.50",     // optional, validated IPv4/IPv6
+#   "mac":           "AA:BB:CC:DD:EE:FF" // optional, validated MAC
+# }
+POST {{base_url}}/api/v1/devices
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Update device (all fields optional)
+# e2e.py: uv run python http/e2e.py patch /api/v1/devices/{{device_id}} \
+#   '{"ip":"192.168.1.51","is_active":true}'
+#
+# Additional update-only field: "is_active" (bool)
+PATCH {{base_url}}/api/v1/devices/{{device_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete device
+# e2e.py: uv run python http/e2e.py delete /api/v1/devices/{{device_id}}
+DELETE {{base_url}}/api/v1/devices/{{device_id}}
+X-Session-ID: {{session_id}}

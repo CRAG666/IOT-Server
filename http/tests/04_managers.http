@@ -1,0 +1,54 @@
+### List managers
+# @expect 200
+GET /api/v1/managers/
+
+### Create manager
+# CURP TOMA850315HDFXYZ03 — valid check digit
+# @expect 201
+# @capture new_manager_id $.id
+# @assert $.first_name E2EMgr
+# @assert $.is_active true
+POST /api/v1/managers/
+
+{
+  "first_name": "E2EMgr",
+  "last_name": "Test",
+  "second_last_name": "Suite",
+  "phone": "+523312345681",
+  "address": "200 Integration Test Ave",
+  "city": "Guadalajara",
+  "state": "Jalisco",
+  "postal_code": "44100",
+  "birth_date": "1988-07-22T00:00:00",
+  "email": "e2e.manager@iotmx.test",
+  "password": "E2eMgr001!",
+  "curp": "TOMA850315HDFXYZ03",
+  "rfc": "TOMA850315AB1"
+}
+
+### Get manager by ID
+# @expect 200
+# @assert $.id {{new_manager_id}}
+# @assert $.first_name E2EMgr
+GET /api/v1/managers/{{new_manager_id}}
+
+### Update manager city
+# @expect 200
+# @assert $.last_name TestUpd
+PATCH /api/v1/managers/{{new_manager_id}}
+
+{"last_name": "TestUpd"}
+
+### Restore original last name
+# @expect 200
+PATCH /api/v1/managers/{{new_manager_id}}
+
+{"last_name": "Test"}
+
+### List managers — page query params
+# @expect 200
+GET /api/v1/managers/?offset=0&limit=5
+
+### Get non-existent manager — 404
+# @expect 404
+GET /api/v1/managers/00000000-0000-0000-0000-000000000001

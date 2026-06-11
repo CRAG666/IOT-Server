@@ -78,7 +78,7 @@ class HumanPasswordAuth(IAuthMethod):
         if sensitive_data is None:
             return {"valid": False, "error": "Invalid credentials"}
 
-        if not verify_password(password, sensitive_data.password_hash):
+        if not verify_password(password, sensitive_data.password_salt, sensitive_data.password_hash):
             return {"valid": False, "error": "Invalid credentials"}
 
         if hasattr(entity, "is_active") and not entity.is_active:

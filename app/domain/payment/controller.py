@@ -1,5 +1,6 @@
 from uuid import UUID
 from fastapi import HTTPException, status
+from sqlalchemy import delete as _sa_delete
 from sqlmodel import select
 
 from app.shared.base_domain.controller import FullCrudApiController
@@ -22,22 +23,14 @@ from app.database.model import (
     User,
     Service,
 )
-from app.shared.authorization.dependencies import require_read, require_write, require_delete
-
-
 class PaymentController(FullCrudApiController):
     prefix = "/payments"
     tags = ["Payments"]
+    model_class = Payment
     service_dep = PaymentServiceDep
     response_schema = PaymentResponse
     create_schema = PaymentCreate
     update_schema = PaymentCreate
-
-    list_dependencies = [require_read(Payment)]
-    retrieve_dependencies = [require_read(Payment)]
-    create_dependencies = [require_write(Payment)]
-    update_dependencies = [require_write(Payment)]
-    delete_dependencies = [require_delete(Payment)]
 
 
 payment_router = PaymentController().router
@@ -142,7 +135,7 @@ def delete_subscription_type(type_id: UUID, session: SessionDep):
     if not sub_type:
         raise HTTPException(status_code=404, detail="Subscription type not found")
 
-    session.delete(sub_type)
+    session.execute(_sa_delete(SubscriptionType).where(SubscriptionType.id == type_id))
     session.commit()
 
 
@@ -196,7 +189,10 @@ def unassign_user_from_service(user_id: UUID, service_id: UUID, session: Session
     if not user_service:
         raise HTTPException(status_code=404, detail="User not assigned to this service")
 
-    session.delete(user_service)
+    session.execute(_sa_delete(UserService).where(
+        UserService.user_id == user_id,
+        UserService.service_id == service_id,
+    ))
     session.commit()
 
 

@@ -20,6 +20,7 @@ class IApplicationService(IBaseService[Application, ApplicationCreate, Applicati
 class ApplicationService(BaseService[Application, ApplicationCreate, ApplicationUpdate], IApplicationService):
     entity_name = "Application"
     repository_class = ApplicationRepository
+    audit_excluded_fields = BaseService.audit_excluded_fields | frozenset({"api_key"})
 
     @override
     def get_all(self, offset: int = 0, limit: int = 20) -> PageResponse[Application]:

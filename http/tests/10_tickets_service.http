@@ -1,0 +1,57 @@
+### List service tickets
+# @expect 200
+GET /api/v1/tickets/service/
+
+### Create service ticket
+# Requires: user_role_id (captured from 09_roles.http as new_user_role_id),
+#           service_id (captured from 08_services.http as new_service_id),
+#           status_id (integer FK — must exist in ticket_status table).
+#
+# seed:  INSERT INTO ticket_status (name) VALUES ('Open') ON CONFLICT DO NOTHING;
+#        id=1 is assumed. Run seed before the full test suite.
+#        run_all.sh handles this automatically for SQLite environments.
+# @expect 201
+# @capture new_svc_ticket_id $.id
+# @assert $.title E2EServiceTicket
+# @assert $.priority medium
+POST /api/v1/tickets/service/
+
+{
+  "title": "E2EServiceTicket",
+  "description": "Created by E2E test suite",
+  "user_role_id": "{{new_user_role_id}}",
+  "status_id": 1,
+  "service_id": "{{new_service_id}}",
+  "priority": "medium"
+}
+
+### Get service ticket by ID
+# @expect 200
+# @assert $.id {{new_svc_ticket_id}}
+# @assert $.title E2EServiceTicket
+GET /api/v1/tickets/service/{{new_svc_ticket_id}}
+
+### Update service ticket priority
+# @expect 200
+# @assert $.priority high
+PATCH /api/v1/tickets/service/{{new_svc_ticket_id}}
+
+{"priority": "high"}
+
+### Update service ticket title and restore priority
+# @expect 200
+# @assert $.title E2EServiceTicketUpd
+PATCH /api/v1/tickets/service/{{new_svc_ticket_id}}
+
+{"title": "E2EServiceTicketUpd", "priority": "medium"}
+
+### Restore title
+# @expect 200
+# @assert $.title E2EServiceTicket
+PATCH /api/v1/tickets/service/{{new_svc_ticket_id}}
+
+{"title": "E2EServiceTicket"}
+
+### Get non-existent service ticket — 404
+# @expect 404
+GET /api/v1/tickets/service/00000000-0000-0000-0000-000000000007

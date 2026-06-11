@@ -1,0 +1,78 @@
+# =============================================================================
+# IoTmx API — Applications
+# Required role: administrator/manager (read/write), administrator (delete)
+#
+# Login first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url        = http://localhost:8000
+@session_id      = REPLACE_WITH_SESSION_ID
+@application_id  = REPLACE_WITH_APPLICATION_UUID
+@admin_id        = REPLACE_WITH_ADMIN_UUID
+
+
+### List all applications
+# e2e.py: uv run python http/e2e.py get "/api/v1/applications?offset=0&limit=20"
+GET {{base_url}}/api/v1/applications?offset=0&limit=20
+X-Session-ID: {{session_id}}
+
+###
+
+### Get application by ID
+# e2e.py: uv run python http/e2e.py get /api/v1/applications/{{application_id}}
+GET {{base_url}}/api/v1/applications/{{application_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Create application
+# Returns a server-generated "server_key" in the response — store it securely.
+# e2e.py: uv run python http/e2e.py post /api/v1/applications \
+#   '{"name":"MyApp","version":"1.0.0","url":"https://myapp.example.com","description":"IoT dashboard","administrator_id":"ADMIN_UUID"}'
+#
+# Plaintext body shape:
+# {
+#   "name":             "MyApp",                       // required
+#   "version":          "1.0.0",                       // optional
+#   "url":              "https://myapp.example.com",   // optional
+#   "description":      "IoT dashboard",               // optional
+#   "administrator_id": "<UUID>"                       // required
+# }
+POST {{base_url}}/api/v1/applications
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Update application (all fields optional)
+# e2e.py: uv run python http/e2e.py patch /api/v1/applications/{{application_id}} \
+#   '{"version":"1.1.0","is_active":true}'
+PATCH {{base_url}}/api/v1/applications/{{application_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete application
+# e2e.py: uv run python http/e2e.py delete /api/v1/applications/{{application_id}}
+DELETE {{base_url}}/api/v1/applications/{{application_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Authenticate application (device-side puzzle handshake)
+# Used by IoT devices/applications to establish an encrypted channel.
+# The encrypted_payload contains {"ciphertext": "...", "iv": "..."}
+# encrypted with the application's server_key.
+# e2e.py: uv run python http/e2e.py post /api/v1/applications/auth \
+#   '{"application_id":"APP_UUID","encrypted_payload":{"ciphertext":"...","iv":"..."}}'
+POST {{base_url}}/api/v1/applications/auth
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }

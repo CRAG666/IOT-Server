@@ -1,0 +1,88 @@
+### List services
+# @expect 200
+GET /api/v1/services/
+
+### Create service (requires administrator_id)
+# @expect 201
+# @capture new_service_id $.id
+# @assert $.name E2EService
+# @assert $.is_active true
+POST /api/v1/services/
+
+{
+  "name": "E2EService",
+  "description": "E2E test IoT service",
+  "administrator_id": "{{new_admin_id}}"
+}
+
+### Get service by ID
+# @expect 200
+# @assert $.id {{new_service_id}}
+# @assert $.name E2EService
+GET /api/v1/services/{{new_service_id}}
+
+### Update service description
+# @expect 200
+# @assert $.description Updated E2E service
+PATCH /api/v1/services/{{new_service_id}}
+
+{"description": "Updated E2E service"}
+
+### Restore description
+# @expect 200
+PATCH /api/v1/services/{{new_service_id}}
+
+{"description": "E2E test IoT service"}
+
+### Assign manager to service
+# @expect 201
+# @capture manager_service_rel_id $.id
+# @assert $.manager_id {{new_manager_id}}
+# @assert $.service_id {{new_service_id}}
+POST /api/v1/services/{{new_service_id}}/managers/{{new_manager_id}}
+
+### List managers assigned to service — should include the new manager
+# @expect 200
+GET /api/v1/services/{{new_service_id}}/managers
+
+### Assign device to service
+# @expect 201
+# @assert $.device_id {{new_device_id}}
+# @assert $.service_id {{new_service_id}}
+POST /api/v1/services/{{new_service_id}}/devices/{{new_device_id}}
+
+### List devices assigned to service
+# @expect 200
+GET /api/v1/services/{{new_service_id}}/devices
+
+### Assign application to service
+# @expect 201
+# @assert $.application_id {{new_app_id}}
+# @assert $.service_id {{new_service_id}}
+POST /api/v1/services/{{new_service_id}}/applications/{{new_app_id}}
+
+### List applications assigned to service
+# @expect 200
+GET /api/v1/services/{{new_service_id}}/applications
+
+### Assign same manager again — 409 conflict
+# @expect 409
+POST /api/v1/services/{{new_service_id}}/managers/{{new_manager_id}}
+
+### Deactivate service
+# @expect 200
+# @assert $.is_active false
+PATCH /api/v1/services/{{new_service_id}}
+
+{"is_active": false}
+
+### Reactivate service
+# @expect 200
+# @assert $.is_active true
+PATCH /api/v1/services/{{new_service_id}}
+
+{"is_active": true}
+
+### Get non-existent service — 404
+# @expect 404
+GET /api/v1/services/00000000-0000-0000-0000-000000000005

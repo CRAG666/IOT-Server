@@ -1,0 +1,103 @@
+### List subscription types
+# @expect 200
+GET /api/v1/payments/subscription-types
+
+### Create subscription type
+# cost is Decimal → send as string to preserve precision
+# type must be one of the period-map keys: mensual, bimestral, anual
+# @expect 201
+# @capture new_sub_type_id $.id
+# @assert $.type mensual
+POST /api/v1/payments/subscription-types
+
+{"type": "mensual", "cost": "29.99"}
+
+### Get subscription type by ID
+# @expect 200
+# @assert $.id {{new_sub_type_id}}
+# @assert $.type mensual
+GET /api/v1/payments/subscription-types/{{new_sub_type_id}}
+
+### Update subscription cost
+# @expect 200
+PATCH /api/v1/payments/subscription-types/{{new_sub_type_id}}
+
+{"cost": "34.99"}
+
+### Restore cost
+# @expect 200
+PATCH /api/v1/payments/subscription-types/{{new_sub_type_id}}
+
+{"cost": "29.99"}
+
+### Assign user to service (creates UserService record)
+# @expect 201
+# @capture new_user_service_id $.id
+POST /api/v1/payments/user-services/{{new_user_id}}/{{new_service_id}}
+
+{}
+
+### List services for user
+# @expect 200
+GET /api/v1/payments/user-services/user/{{new_user_id}}
+
+### List users for service
+# @expect 200
+GET /api/v1/payments/user-services/service/{{new_service_id}}
+
+### List payments
+# @expect 200
+GET /api/v1/payments/
+
+### Create payment
+# amount is Decimal → send as string
+# deposit_id is a reference UUID — any valid UUID
+# @expect 201
+# @capture new_payment_id $.id
+POST /api/v1/payments/
+
+{
+  "user_service_id": "{{new_user_service_id}}",
+  "subscription_type_id": "{{new_sub_type_id}}",
+  "deposit_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "amount": "29.99"
+}
+
+### Get payment by ID
+# @expect 200
+# @assert $.id {{new_payment_id}}
+GET /api/v1/payments/{{new_payment_id}}
+
+### Update payment amount — PaymentCreate schema requires all fields
+# @expect 200
+PATCH /api/v1/payments/{{new_payment_id}}
+
+{
+  "user_service_id": "{{new_user_service_id}}",
+  "subscription_type_id": "{{new_sub_type_id}}",
+  "deposit_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "amount": "34.99"
+}
+
+### Restore amount
+# @expect 200
+PATCH /api/v1/payments/{{new_payment_id}}
+
+{
+  "user_service_id": "{{new_user_service_id}}",
+  "subscription_type_id": "{{new_sub_type_id}}",
+  "deposit_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "amount": "29.99"
+}
+
+### Get payment history
+# @expect 200
+GET /api/v1/payments/{{new_payment_id}}/history
+
+### Get non-existent payment — 404
+# @expect 404
+GET /api/v1/payments/00000000-0000-0000-0000-000000000009
+
+### Get non-existent subscription type — 404
+# @expect 404
+GET /api/v1/payments/subscription-types/00000000-0000-0000-0000-000000000010

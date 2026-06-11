@@ -1,0 +1,37 @@
+### Auth challenge — returns salt for login
+# @public
+# @expect 200
+# @capture challenge_salt $.salt
+GET /api/v1/auth/challenge?email=master_admin@test.com
+
+### Get challenge for non-existent email — still returns 200 (no user enumeration)
+# @public
+# @expect 200
+GET /api/v1/auth/challenge?email=nobody@nowhere.example
+
+### Change password — then change back to keep suite idempotent
+# @expect 200
+PATCH /api/v1/auth/change-password
+
+{"current_password": "MasterPassword123!", "new_password": "MasterNew123!"}
+
+### Re-login after password change
+# @login master_admin@test.com MasterNew123!
+
+### Change password back to original
+# @expect 200
+PATCH /api/v1/auth/change-password
+
+{"current_password": "MasterNew123!", "new_password": "MasterPassword123!"}
+
+### Re-login with original password
+# @login master_admin@test.com MasterPassword123!
+
+### Renew session token
+# @expect 200
+POST /api/v1/auth/renew
+
+{}
+
+### Re-establish session after renew (renew invalidates the old session_id)
+# @login master_admin@test.com MasterPassword123!

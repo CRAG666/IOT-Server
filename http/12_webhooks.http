@@ -1,0 +1,56 @@
+# =============================================================================
+# IoTmx API — Webhooks
+# Required role: administrator/manager (read/write)
+#
+# Webhooks deliver real-time event notifications to your HTTPS endpoint.
+# The server sends a POST with a JSON body describing the event.
+#
+# Supported event types:
+#   device.telemetry        — new telemetry record ingested
+#   service.state_changed   — service enabled/disabled
+#   ticket.created          — new support ticket opened
+#   payment.completed       — payment recorded
+#
+# Login first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url   = http://localhost:8000
+@session_id = REPLACE_WITH_SESSION_ID
+@webhook_id = REPLACE_WITH_WEBHOOK_UUID
+
+
+### List webhooks registered by the authenticated account
+# e2e.py: uv run python http/e2e.py get /api/v1/webhooks
+GET {{base_url}}/api/v1/webhooks
+X-Session-ID: {{session_id}}
+
+###
+
+### Register a webhook endpoint
+# e2e.py: uv run python http/e2e.py post /api/v1/webhooks \
+#   '{"url":"https://myapp.example.com/hooks/iotmx","event_types":["device.telemetry","payment.completed"]}'
+#
+# Plaintext body shape:
+# {
+#   "url":          "https://myapp.example.com/hooks/iotmx",  // required, HTTPS URL
+#   "event_types":  ["device.telemetry", "payment.completed"] // required, min 1 item
+# }
+#
+# Valid event_types:
+#   "device.telemetry"
+#   "service.state_changed"
+#   "ticket.created"
+#   "payment.completed"
+POST {{base_url}}/api/v1/webhooks
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete webhook
+# e2e.py: uv run python http/e2e.py delete /api/v1/webhooks/{{webhook_id}}
+DELETE {{base_url}}/api/v1/webhooks/{{webhook_id}}
+X-Session-ID: {{session_id}}

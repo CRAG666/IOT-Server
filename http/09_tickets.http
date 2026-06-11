@@ -1,0 +1,133 @@
+# =============================================================================
+# IoTmx API — Support Tickets
+#
+# Service tickets: end-user ↔ service support (user_role_id references a role)
+# Ecosystem tickets: manager ↔ platform support (manager_service_id)
+#
+# Required role: administrator/manager/user (read), support_agent (read+write)
+#                administrator (delete)
+#
+# Priority values: "low" | "medium" | "high" | "critical"
+#
+# Login first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url        = http://localhost:8000
+@session_id      = REPLACE_WITH_SESSION_ID
+@ticket_id       = REPLACE_WITH_TICKET_UUID
+@user_role_id    = REPLACE_WITH_USER_ROLE_UUID
+@mgr_service_id  = REPLACE_WITH_MANAGER_SERVICE_UUID
+@status_id       = REPLACE_WITH_STATUS_UUID
+@service_id      = REPLACE_WITH_SERVICE_UUID
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Service tickets  (/tickets/service)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### List all service tickets
+# e2e.py: uv run python http/e2e.py get "/api/v1/tickets/service?offset=0&limit=20"
+GET {{base_url}}/api/v1/tickets/service?offset=0&limit=20
+X-Session-ID: {{session_id}}
+
+###
+
+### Get service ticket by ID
+# e2e.py: uv run python http/e2e.py get /api/v1/tickets/service/{{ticket_id}}
+GET {{base_url}}/api/v1/tickets/service/{{ticket_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Create service ticket
+# e2e.py: uv run python http/e2e.py post /api/v1/tickets/service \
+#   '{"title":"Device offline","description":"Sensor-001 stopped reporting","user_role_id":"USER_ROLE_UUID","status_id":"STATUS_UUID","service_id":"SERVICE_UUID","priority":"high"}'
+#
+# Plaintext body shape:
+# {
+#   "title":        "Device offline",           // required
+#   "description":  "Sensor stopped reporting", // optional
+#   "user_role_id": "<UUID>",                   // required — UserRole assignment ID
+#   "status_id":    "<UUID>",                   // required — TicketStatus ID
+#   "service_id":   "<UUID>",                   // required
+#   "priority":     "high"                      // optional, default "medium"
+# }
+POST {{base_url}}/api/v1/tickets/service
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Update service ticket (all fields optional)
+# e2e.py: uv run python http/e2e.py patch /api/v1/tickets/service/{{ticket_id}} \
+#   '{"status_id":"NEW_STATUS_UUID","priority":"critical"}'
+PATCH {{base_url}}/api/v1/tickets/service/{{ticket_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete service ticket
+# e2e.py: uv run python http/e2e.py delete /api/v1/tickets/service/{{ticket_id}}
+DELETE {{base_url}}/api/v1/tickets/service/{{ticket_id}}
+X-Session-ID: {{session_id}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ecosystem tickets  (/tickets/ecosystem)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### List all ecosystem tickets
+# e2e.py: uv run python http/e2e.py get "/api/v1/tickets/ecosystem?offset=0&limit=20"
+GET {{base_url}}/api/v1/tickets/ecosystem?offset=0&limit=20
+X-Session-ID: {{session_id}}
+
+###
+
+### Get ecosystem ticket by ID
+# e2e.py: uv run python http/e2e.py get /api/v1/tickets/ecosystem/{{ticket_id}}
+GET {{base_url}}/api/v1/tickets/ecosystem/{{ticket_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Create ecosystem ticket
+# e2e.py: uv run python http/e2e.py post /api/v1/tickets/ecosystem \
+#   '{"title":"Billing discrepancy","description":"Invoice #1234 incorrect","manager_service_id":"MGR_SVC_UUID","status_id":"STATUS_UUID","priority":"medium"}'
+#
+# Plaintext body shape:
+# {
+#   "title":              "Billing discrepancy",    // required
+#   "description":        "Invoice incorrect",      // optional
+#   "manager_service_id": "<UUID>",                 // required — ManagerService link ID
+#   "status_id":          "<UUID>",                 // required — TicketStatus ID
+#   "priority":           "medium"                  // optional, default "medium"
+# }
+POST {{base_url}}/api/v1/tickets/ecosystem
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Update ecosystem ticket (all fields optional)
+# e2e.py: uv run python http/e2e.py patch /api/v1/tickets/ecosystem/{{ticket_id}} \
+#   '{"status_id":"RESOLVED_UUID"}'
+PATCH {{base_url}}/api/v1/tickets/ecosystem/{{ticket_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete ecosystem ticket
+# e2e.py: uv run python http/e2e.py delete /api/v1/tickets/ecosystem/{{ticket_id}}
+DELETE {{base_url}}/api/v1/tickets/ecosystem/{{ticket_id}}
+X-Session-ID: {{session_id}}

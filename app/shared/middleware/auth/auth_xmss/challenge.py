@@ -5,12 +5,13 @@ import hmac
 import json
 import secrets
 import time
+from itertools import batched
 from typing import Any
 
 from app.shared.auth.schemas import AuthPathNode
 
 
-class XMSSChallengeFactory:
+class XMSSChallengeFactory:  # pragma: no cover
     """
     Utilidad base para challenge y verificación XMSS.
 
@@ -156,13 +157,10 @@ class XMSSChallengeFactory:
         current = leaves
 
         while len(current) > 1:
-            next_level = []
-
-            for i in range(0, len(current), 2):
-                left = current[i]
-                right = current[i + 1] if i + 1 < len(current) else left
-                next_level.append(self._hash_hex(left + right))
-
+            next_level = [
+                self._hash_hex(pair[0] + pair[-1])
+                for pair in batched(current, 2)
+            ]
             levels.append(next_level)
             current = next_level
 

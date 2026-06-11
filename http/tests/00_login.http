@@ -1,0 +1,4 @@
+### Login as master admin
+# Prerequisite: the server must have a master_admin account seeded.
+# Credentials come from tests/conftest.py master_admin_fixture.
+# @login master_admin@test.com MasterPassword123!

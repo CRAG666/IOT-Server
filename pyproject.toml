@@ -1,31 +1,68 @@
 [project]
 name = "prog-seg-api"
 version = "0.1.0"
-description = "Add your description here"
+description = "IoTmx REST API — multi-tenant IoT platform"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "aiosqlite>=0.22.1",
+    "psycopg2-binary>=2.9.9",
+    "casbin>=1.36.3",
     "cryptography>=43.0.0",
     "fastapi>=0.135.1",
     "pydantic-settings>=2.13.1",
     "sqlmodel>=0.0.37",
     "uvicorn>=0.41.0",
-    "pyjwt>=2.10.1",
-    "bcrypt>=4.0.0",
-    "pytest>=8.4.0",
-    "pytest-asyncio>=0.24.0",
-    "httpx>=0.28.1",
-    "oso>=0.27.3",
+    "alembic>=1.14.0",
     "valkey>=6.1.0",
     "python-jose[cryptography]>=3.5.0",
+    "email-validator>=2.2.0",
+    "loguru>=0.7.3",
+    "motor>=3.6.0",
+    "fastapi-mail>=1.4.1",
+    "aiomqtt>=2.3.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.27.0",
+    "prometheus-client>=0.21.0",
+    "casbin-sqlalchemy-adapter>=1.4.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
+[tool.pyright]
+include = ["app"]
+exclude = ["app/database/select_in_load.py"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownParameterType = false
+reportOperatorIssue = false
+# SQLModel/SQLAlchemy stubs are incomplete — raw SQL queries use text() which
+# doesn't match typed exec() overloads; repository patterns use mixin attributes
+# that pyright cannot infer without fully-typed stubs.
+reportCallIssue = false
+reportAttributeAccessIssue = false
+reportRedeclaration = false
+reportIncompatibleMethodOverride = false
+reportGeneralTypeIssues = false
+reportInvalidTypeForm = false
+reportArgumentType = false
+reportOptionalMemberAccess = false
+reportAssignmentType = false
+
 [dependency-groups]
 dev = [
-    "pytest-asyncio>=1.3.0",
+    "pytest>=8.4.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.1",
+    "fakeredis>=2.26.0",
+    "pyright>=1.1.410",
 ]

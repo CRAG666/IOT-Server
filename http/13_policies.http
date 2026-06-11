@@ -1,0 +1,91 @@
+# =============================================================================
+# IoTmx API — Dynamic Authorization Policies (Casbin RBAC)
+# Required role: master_admin ONLY (administer permission)
+#
+# These endpoints let the master administrator inspect and modify Casbin
+# policy rules at runtime without restarting the server.
+#
+# Standard Casbin (sub, obj, act) order:
+#   sub = role name   (e.g. "manager", "administrator", "support_agent")
+#   obj = resource    (SQLModel class name, e.g. "User", "Device")
+#   act = action      ("read" | "write" | "delete" | "administer")
+#
+# The master_admin wildcard rule (master_admin, *, *) cannot be removed.
+#
+# Login as master admin first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url   = http://localhost:8000
+@session_id = REPLACE_WITH_SESSION_ID
+
+
+### List all active policy rules
+# e2e.py: uv run python http/e2e.py get /api/v1/policies
+GET {{base_url}}/api/v1/policies
+X-Session-ID: {{session_id}}
+
+###
+
+### Get all rules for a specific role
+# e2e.py: uv run python http/e2e.py get /api/v1/policies/administrator
+GET {{base_url}}/api/v1/policies/administrator
+X-Session-ID: {{session_id}}
+
+###
+
+### Get rules for manager role
+# e2e.py: uv run python http/e2e.py get /api/v1/policies/manager
+GET {{base_url}}/api/v1/policies/manager
+X-Session-ID: {{session_id}}
+
+###
+
+### Get rules for support_agent role
+# e2e.py: uv run python http/e2e.py get /api/v1/policies/support_agent
+GET {{base_url}}/api/v1/policies/support_agent
+X-Session-ID: {{session_id}}
+
+###
+
+### Add a policy rule (idempotent)
+# e2e.py: uv run python http/e2e.py post /api/v1/policies \
+#   '{"role":"support_agent","resource":"Report","action":"read"}'
+#
+# Plaintext body shape:
+# {
+#   "role":     "support_agent",   // no wildcards allowed
+#   "resource": "Report",          // no wildcards allowed (SQLModel class name)
+#   "action":   "read"             // "read" | "write" | "delete" | "administer"
+# }
+POST {{base_url}}/api/v1/policies
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Add write permission for managers on AuditLog resource
+# e2e.py: uv run python http/e2e.py post /api/v1/policies \
+#   '{"role":"manager","resource":"AuditLog","action":"read"}'
+POST {{base_url}}/api/v1/policies
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Remove a policy rule
+# URL format: DELETE /api/v1/policies/{role}/{resource}/{action}
+# e2e.py: uv run python http/e2e.py delete /api/v1/policies/support_agent/Report/read
+DELETE {{base_url}}/api/v1/policies/support_agent/Report/read
+X-Session-ID: {{session_id}}
+
+###
+
+### Remove manager read on AuditLog
+# e2e.py: uv run python http/e2e.py delete /api/v1/policies/manager/AuditLog/read
+DELETE {{base_url}}/api/v1/policies/manager/AuditLog/read
+X-Session-ID: {{session_id}}

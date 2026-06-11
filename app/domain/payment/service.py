@@ -135,7 +135,10 @@ class PaymentService(BaseService[Payment, PaymentCreate, PaymentCreate], IPaymen
             return
 
         now = datetime.now(timezone.utc)
-        if last_payment.expires_at < now:
+        expires = last_payment.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if expires < now:
             user_service = session.get(UserService, user_service_id)
             if user_service and user_service.is_active:
                 user_service.is_active = False

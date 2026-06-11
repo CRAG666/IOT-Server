@@ -1,0 +1,145 @@
+# =============================================================================
+# IoTmx API — Services & resource assignments
+# Required role: administrator (read/write/delete), manager (read/write)
+#
+# Login first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url        = http://localhost:8000
+@session_id      = REPLACE_WITH_SESSION_ID
+@service_id      = REPLACE_WITH_SERVICE_UUID
+@manager_id      = REPLACE_WITH_MANAGER_UUID
+@application_id  = REPLACE_WITH_APPLICATION_UUID
+@device_id       = REPLACE_WITH_DEVICE_UUID
+@admin_id        = REPLACE_WITH_ADMIN_UUID
+
+
+### List all services
+# e2e.py: uv run python http/e2e.py get "/api/v1/services?offset=0&limit=20"
+GET {{base_url}}/api/v1/services?offset=0&limit=20
+X-Session-ID: {{session_id}}
+
+###
+
+### Get service by ID
+# e2e.py: uv run python http/e2e.py get /api/v1/services/{{service_id}}
+GET {{base_url}}/api/v1/services/{{service_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Create service
+# e2e.py: uv run python http/e2e.py post /api/v1/services \
+#   '{"name":"Smart Grid","description":"Power grid monitoring","administrator_id":"ADMIN_UUID"}'
+#
+# Plaintext body shape:
+# {
+#   "name":             "Smart Grid",         // required
+#   "description":      "Power monitoring",   // optional
+#   "administrator_id": "<UUID>"              // required — owning administrator
+# }
+POST {{base_url}}/api/v1/services
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Update service (all fields optional)
+# e2e.py: uv run python http/e2e.py patch /api/v1/services/{{service_id}} \
+#   '{"description":"Updated description","is_active":true}'
+PATCH {{base_url}}/api/v1/services/{{service_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete service
+# e2e.py: uv run python http/e2e.py delete /api/v1/services/{{service_id}}
+DELETE {{base_url}}/api/v1/services/{{service_id}}
+X-Session-ID: {{session_id}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Manager assignments
+# ─────────────────────────────────────────────────────────────────────────────
+
+### List managers for a service
+# e2e.py: uv run python http/e2e.py get /api/v1/services/{{service_id}}/managers
+GET {{base_url}}/api/v1/services/{{service_id}}/managers
+X-Session-ID: {{session_id}}
+
+###
+
+### Assign manager to service
+# e2e.py: uv run python http/e2e.py post /api/v1/services/{{service_id}}/managers/{{manager_id}} '{}'
+POST {{base_url}}/api/v1/services/{{service_id}}/managers/{{manager_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Remove manager from service
+# e2e.py: uv run python http/e2e.py delete /api/v1/services/{{service_id}}/managers/{{manager_id}}
+DELETE {{base_url}}/api/v1/services/{{service_id}}/managers/{{manager_id}}
+X-Session-ID: {{session_id}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Application assignments
+# ─────────────────────────────────────────────────────────────────────────────
+
+### List applications for a service
+# e2e.py: uv run python http/e2e.py get /api/v1/services/{{service_id}}/applications
+GET {{base_url}}/api/v1/services/{{service_id}}/applications
+X-Session-ID: {{session_id}}
+
+###
+
+### Assign application to service
+# e2e.py: uv run python http/e2e.py post /api/v1/services/{{service_id}}/applications/{{application_id}} '{}'
+POST {{base_url}}/api/v1/services/{{service_id}}/applications/{{application_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Remove application from service
+# e2e.py: uv run python http/e2e.py delete /api/v1/services/{{service_id}}/applications/{{application_id}}
+DELETE {{base_url}}/api/v1/services/{{service_id}}/applications/{{application_id}}
+X-Session-ID: {{session_id}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Device assignments
+# ─────────────────────────────────────────────────────────────────────────────
+
+### List devices for a service
+# e2e.py: uv run python http/e2e.py get /api/v1/services/{{service_id}}/devices
+GET {{base_url}}/api/v1/services/{{service_id}}/devices
+X-Session-ID: {{session_id}}
+
+###
+
+### Assign device to service
+# e2e.py: uv run python http/e2e.py post /api/v1/services/{{service_id}}/devices/{{device_id}} '{}'
+POST {{base_url}}/api/v1/services/{{service_id}}/devices/{{device_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Remove device from service
+# e2e.py: uv run python http/e2e.py delete /api/v1/services/{{service_id}}/devices/{{device_id}}
+DELETE {{base_url}}/api/v1/services/{{service_id}}/devices/{{device_id}}
+X-Session-ID: {{session_id}}

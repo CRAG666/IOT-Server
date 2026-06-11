@@ -3,8 +3,6 @@ from typing import Annotated, override
 from uuid import UUID
 from fastapi import Depends
 
-from uuid import UUID
-
 from fastapi import HTTPException, status
 from sqlmodel import select
 
@@ -36,7 +34,9 @@ class UserService(PersonalDataService[User], IUserService):
         if current_user.account_type == "administrator":
             items, total = self.repository.get_all(offset, limit)
         elif current_user.account_type == "manager":
-            items, total = self.repository.get_for_manager(current_user.account_id, offset, limit)
+            items, total = self.repository.get_for_manager(
+                current_user.account_id, offset, limit
+            )
         elif current_user.account_type == "user":
             entity = self.repository.get_by_id(current_user.account_id)
             items = [entity] if entity else []
@@ -71,12 +71,48 @@ class UserService(PersonalDataService[User], IUserService):
 
         raise NotFoundException(self.entity_name, id)
 
+    def assign_role_to_user(self, user_id: UUID, role_id: UUID) -> UserRole:
+        user = self.repository.get_by_id(user_id)
+        if not user:
+            raise NotFoundException("User", user_id)
+        role = self.repository.session.get(Role, role_id)
+        if not role:
+            raise NotFoundException("Role", role_id)
+        existing = self.repository.session.exec(
+            select(UserRole).where(
+                UserRole.user_id == user_id, UserRole.role_id == role_id
+            )
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Role already assigned to user",
+            )
+        user_role = UserRole(user_id=user_id, role_id=role_id)
+        self.repository.session.add(user_role)
+        self.repository.session.commit()
+        self.repository.session.refresh(user_role)
+        return user_role
 
-def get_user_service(session: SessionDep) -> UserService:
-    return UserService(session)
+    def remove_role_from_user(self, user_id: UUID, role_id: UUID) -> None:
+        user_role = self.repository.session.exec(
+            select(UserRole).where(
+                UserRole.user_id == user_id, UserRole.role_id == role_id
+            )
+        ).first()
+        if not user_role:
+            raise NotFoundException("UserRole", role_id)
+        self.repository.session.delete(user_role)
+        self.repository.session.commit()
 
-
-UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+    def list_roles_by_user(self, user_id: UUID) -> list[Role]:
+        user = self.repository.get_by_id(user_id)
+        if not user:
+            raise NotFoundException("User", user_id)
+        user_roles = self.repository.session.exec(
+            select(UserRole).where(UserRole.user_id == user_id)
+        ).all()
+        return [ur.role for ur in user_roles]
 
 
 def get_user_service(session: SessionDep) -> UserService:

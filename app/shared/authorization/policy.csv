@@ -1,0 +1,147 @@
+# Casbin policy — mirrors the allow matrix in the former policies.polar
+# Format: p, role, resource, action
+# Roles: master_admin | administrator | manager | user
+# Actions: read | write | delete | *
+# Resources: resource type names OR * (wildcard for master_admin)
+
+# ── MASTER ADMIN: unrestricted ─────────────────────────────────────────────
+p, master_admin, *, *
+
+# ── ADMINISTRATOR (non-master) ─────────────────────────────────────────────
+# Users
+p, administrator, User, read
+p, administrator, User, write
+p, administrator, User, delete
+
+# Administrators — read allowed; instance-level filtering (own row) done in DB layer
+p, administrator, Administrator, read
+
+# Roles — read only; write/delete denied (not listed = denied)
+p, administrator, Role, read
+
+# Managers
+p, administrator, Manager, read
+p, administrator, Manager, write
+p, administrator, Manager, delete
+
+# Devices
+p, administrator, Device, read
+p, administrator, Device, write
+p, administrator, Device, delete
+
+# Applications
+p, administrator, Application, read
+p, administrator, Application, write
+p, administrator, Application, delete
+
+# Services
+p, administrator, Service, read
+p, administrator, Service, write
+p, administrator, Service, delete
+
+# Tickets
+p, administrator, EcosystemTicket, read
+p, administrator, EcosystemTicket, write
+p, administrator, EcosystemTicket, delete
+p, administrator, ServiceTicket, read
+p, administrator, ServiceTicket, write
+p, administrator, ServiceTicket, delete
+
+# UserRole assignments
+p, administrator, UserRole, read
+p, administrator, UserRole, write
+p, administrator, UserRole, delete
+
+# ── MANAGER ────────────────────────────────────────────────────────────────
+# Users — read/write, no delete; instance filtering via user_manager_vw
+p, manager, User, read
+p, manager, User, write
+
+# Devices — read/write, no delete; instance filtering via device_manager_vw
+p, manager, Device, read
+p, manager, Device, write
+
+# Applications — read/write, no delete; instance filtering via application_manager_vw
+p, manager, Application, read
+p, manager, Application, write
+
+# Services — read/write, no delete; instance filtering via service_manager_vw
+p, manager, Service, read
+p, manager, Service, write
+
+# Managers — read own record only; instance filtering at repository layer
+p, manager, Manager, read
+
+# Tickets
+p, manager, EcosystemTicket, read
+p, manager, EcosystemTicket, write
+p, manager, ServiceTicket, read
+p, manager, ServiceTicket, write
+
+# UserRole assignments (role-user mapping management)
+p, manager, UserRole, read
+p, manager, UserRole, write
+p, manager, UserRole, delete
+
+# Roles, Administrators: no access — not listed = denied
+
+# ── USER (end user) ────────────────────────────────────────────────────────
+# Own profile — instance filtering at repository layer
+p, user, User, read
+p, user, User, write
+
+# Devices — read only
+p, user, Device, read
+
+# Applications — read only
+p, user, Application, read
+
+# Services — read only
+p, user, Service, read
+
+# Tickets
+p, user, EcosystemTicket, read
+p, user, EcosystemTicket, write
+p, user, ServiceTicket, read
+
+# UserRole: read only (list who is in a role)
+p, user, UserRole, read
+
+# Roles, Managers, Administrators: no access
+
+# ── SUPPORT AGENT ───────────────────────────────────────────────────────────
+# Read-only access to users and services for troubleshooting
+p, support_agent, User, read
+p, support_agent, Service, read
+p, support_agent, Device, read
+
+# Ticket handling — can view and create/update service tickets
+p, support_agent, ServiceTicket, read
+p, support_agent, ServiceTicket, write
+p, support_agent, EcosystemTicket, read
+
+# ── SUPPORT ADMIN ────────────────────────────────────────────────────────────
+# Full ticket management + support agent oversight
+p, support_admin, User, read
+p, support_admin, Service, read
+p, support_admin, Device, read
+
+p, support_admin, ServiceTicket, read
+p, support_admin, ServiceTicket, write
+p, support_admin, ServiceTicket, delete
+p, support_admin, EcosystemTicket, read
+p, support_admin, EcosystemTicket, write
+p, support_admin, EcosystemTicket, delete
+
+# ── TELEMETRY (device telemetry ingest + query) ────────────────────────────
+p, administrator, Telemetry, read
+p, administrator, Telemetry, write
+p, manager,       Telemetry, read
+p, user,          Telemetry, write
+p, user,          Telemetry, read
+
+# ── WEBHOOKS ──────────────────────────────────────────────────────────────────
+p, administrator, _Webhook, read
+p, administrator, _Webhook, write
+p, manager,       _Webhook, read
+p, manager,       _Webhook, write

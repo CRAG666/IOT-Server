@@ -1,0 +1,93 @@
+# =============================================================================
+# IoTmx API — Roles & User-Role assignments
+# Required role: administrator/manager (read/write), administrator (delete)
+#
+# Login first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url   = http://localhost:8000
+@session_id = REPLACE_WITH_SESSION_ID
+@role_id    = REPLACE_WITH_ROLE_UUID
+@user_id    = REPLACE_WITH_USER_UUID
+@service_id = REPLACE_WITH_SERVICE_UUID
+
+
+### List all roles
+# e2e.py: uv run python http/e2e.py get "/api/v1/roles?offset=0&limit=20"
+GET {{base_url}}/api/v1/roles?offset=0&limit=20
+X-Session-ID: {{session_id}}
+
+###
+
+### Get role by ID
+# e2e.py: uv run python http/e2e.py get /api/v1/roles/{{role_id}}
+GET {{base_url}}/api/v1/roles/{{role_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Create role
+# e2e.py: uv run python http/e2e.py post /api/v1/roles \
+#   '{"name":"Technician","description":"Field technician access","service_id":"SERVICE_UUID","is_active":true}'
+#
+# Plaintext body shape:
+# {
+#   "name":        "Technician",          // required, letters only, 1-255 chars
+#   "description": "Field technician",    // optional
+#   "service_id":  "<UUID>",              // required — which service owns this role
+#   "is_active":   true                   // optional, default true
+# }
+POST {{base_url}}/api/v1/roles
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Update role (all fields optional)
+# e2e.py: uv run python http/e2e.py patch /api/v1/roles/{{role_id}} \
+#   '{"description":"Updated description","is_active":false}'
+PATCH {{base_url}}/api/v1/roles/{{role_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete role
+# e2e.py: uv run python http/e2e.py delete /api/v1/roles/{{role_id}}
+DELETE {{base_url}}/api/v1/roles/{{role_id}}
+X-Session-ID: {{session_id}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# User ↔ Role assignments (via roles endpoint)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### List users assigned to a role
+# e2e.py: uv run python http/e2e.py get /api/v1/roles/{{role_id}}/users
+GET {{base_url}}/api/v1/roles/{{role_id}}/users
+X-Session-ID: {{session_id}}
+
+###
+
+### Assign a user to a role
+# e2e.py: uv run python http/e2e.py post /api/v1/roles/{{role_id}}/users \
+#   '{"user_id":"USER_UUID"}'
+#
+# Plaintext body: { "user_id": "<UUID>" }
+POST {{base_url}}/api/v1/roles/{{role_id}}/users
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Remove a user from a role
+# e2e.py: uv run python http/e2e.py delete /api/v1/roles/{{role_id}}/users/{{user_id}}
+DELETE {{base_url}}/api/v1/roles/{{role_id}}/users/{{user_id}}
+X-Session-ID: {{session_id}}

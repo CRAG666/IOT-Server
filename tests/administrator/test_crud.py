@@ -1,43 +1,19 @@
 import pytest
-from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
-import jwt
 from uuid import uuid4
+from datetime import datetime, timedelta
 
-from app.config import settings
-
-
-def create_token(account_data: dict) -> str:
-    """Create a valid JWT token for testing."""
-    to_encode = {
-        "sub": str(account_data["id"]),
-        "email": account_data["email"],
-        "type": account_data["account_type"],
-        "is_master": account_data["is_master"],
-    }
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    to_encode.update({"exp": expire})
-    return jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-    )
+from tests.e2e_client import E2ETestClient
 
 
 class TestAdministratorList:
     """Test GET /administrators endpoint."""
 
     def test_list_administrators_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test listing administrators as master admin."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/administrators",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/administrators")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
@@ -45,34 +21,20 @@ class TestAdministratorList:
         assert isinstance(data["data"], list)
 
     def test_list_administrators_as_regular_admin(
-        self, client: TestClient, regular_admin_account: dict
+        self, regular_admin_client: E2ETestClient
     ):
         """Test listing administrators as regular (non-master) admin."""
-        token = create_token(regular_admin_account)
-        response = client.get(
-            "/api/v1/administrators",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = regular_admin_client.get("/api/v1/administrators")
         assert response.status_code == 200  # Regular admins can read administrators
 
-    def test_list_administrators_as_user(self, client: TestClient, user_account: dict):
+    def test_list_administrators_as_user(self, user_client: E2ETestClient):
         """Test listing administrators as user."""
-        token = create_token(user_account)
-        response = client.get(
-            "/api/v1/administrators",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = user_client.get("/api/v1/administrators")
         assert response.status_code == 403
 
-    def test_list_administrators_as_manager(
-        self, client: TestClient, manager_account: dict
-    ):
+    def test_list_administrators_as_manager(self, manager_client: E2ETestClient):
         """Test listing administrators as manager."""
-        token = create_token(manager_account)
-        response = client.get(
-            "/api/v1/administrators",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = manager_client.get("/api/v1/administrators")
         assert response.status_code == 403
 
     def test_list_administrators_without_token(self, client: TestClient):
@@ -81,13 +43,11 @@ class TestAdministratorList:
         assert response.status_code == 401
 
     def test_list_administrators_pagination(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test listing administrators with pagination parameters."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/administrators?offset=0&limit=10",
-            headers={"Authorization": f"Bearer {token}"},
+        response = master_admin_client.get(
+            "/api/v1/administrators?offset=0&limit=10"
         )
         assert response.status_code == 200
         data = response.json()
@@ -95,14 +55,10 @@ class TestAdministratorList:
         assert data["offset"] == 0
 
     def test_list_administrators_items_do_not_expose_sensitive_fields(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test list endpoint does not expose sensitive fields in items."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/administrators",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/administrators")
         assert response.status_code == 200
 
         items = response.json().get("data", [])
@@ -116,13 +72,11 @@ class TestAdministratorRetrieve:
     """Test GET /administrators/{id} endpoint."""
 
     def test_retrieve_administrator_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test retrieving an administrator as master admin."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            f"/api/v1/administrators/{master_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        response = master_admin_client.get(
+            f"/api/v1/administrators/{master_admin_client.account['id']}"
         )
         assert response.status_code == 200
         data = response.json()
@@ -130,49 +84,40 @@ class TestAdministratorRetrieve:
         assert data["is_active"] is True
 
     def test_retrieve_administrator_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test retrieving a non-existent administrator."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            f"/api/v1/administrators/{uuid4()}",
-            headers={"Authorization": f"Bearer {token}"},
+        response = master_admin_client.get(
+            f"/api/v1/administrators/{uuid4()}"
         )
         assert response.status_code == 404
 
     def test_retrieve_administrator_invalid_uuid(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test retrieving administrator with invalid UUID."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/administrators/not-a-uuid",
-            headers={"Authorization": f"Bearer {token}"},
+        response = master_admin_client.get(
+            "/api/v1/administrators/not-a-uuid"
         )
         assert response.status_code == 422
 
     def test_retrieve_administrator_as_regular_admin(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Test retrieving administrator as regular admin (allowed - can read)."""
-        token = create_token(regular_admin_account)
-        response = client.get(
-            f"/api/v1/administrators/{master_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        response = regular_admin_client.get(
+            f"/api/v1/administrators/{master_admin_client.account['id']}"
         )
         assert response.status_code == 200  # Regular admins can read administrators
 
     def test_retrieve_administrator_response_does_not_expose_sensitive_fields(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test retrieve endpoint does not expose sensitive fields."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            f"/api/v1/administrators/{master_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        response = master_admin_client.get(
+            f"/api/v1/administrators/{master_admin_client.account['id']}"
         )
         assert response.status_code == 200
 
@@ -185,10 +130,9 @@ class TestAdministratorCreate:
     """Test POST /administrators endpoint."""
 
     def test_create_administrator_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating a new administrator as master admin."""
-        token = create_token(master_admin_account)
         admin_data = {
             "first_name": "Test",
             "last_name": "User",
@@ -205,11 +149,7 @@ class TestAdministratorCreate:
             "rfc": "NEWC111111AB0",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 201
         data = response.json()
         assert data["first_name"] == "Test"
@@ -217,12 +157,10 @@ class TestAdministratorCreate:
 
     def test_create_administrator_duplicate_email(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Test creating administrator with duplicate email."""
-        token = create_token(master_admin_account)
         admin_data = {
             "first_name": "Test",
             "last_name": "User",
@@ -233,24 +171,19 @@ class TestAdministratorCreate:
             "state": "Mexico",
             "postal_code": "06500",
             "birth_date": datetime(1990, 6, 15).isoformat(),
-            "email": regular_admin_account["email"],
+            "email": regular_admin_client.account["email"],
             "password": "TestPass123!",
             "curp": "DUPC111111HDFRRL09",
             "rfc": "DUPC111111AB0",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 422
 
     def test_create_administrator_missing_required_field(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating administrator with missing required field."""
-        token = create_token(master_admin_account)
         admin_data = {
             "last_name": "User",
             "second_last_name": "Name",
@@ -266,18 +199,13 @@ class TestAdministratorCreate:
             "rfc": "MISS111111AB0",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 422
 
     def test_create_administrator_invalid_phone(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating administrator with invalid phone format."""
-        token = create_token(master_admin_account)
         admin_data = {
             "first_name": "Test",
             "last_name": "User",
@@ -294,18 +222,13 @@ class TestAdministratorCreate:
             "rfc": "PHON111111AB0",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 422
 
     def test_create_administrator_invalid_postal_code(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating administrator with invalid postal code."""
-        token = create_token(master_admin_account)
         admin_data = {
             "first_name": "Test",
             "last_name": "User",
@@ -322,18 +245,13 @@ class TestAdministratorCreate:
             "rfc": "POST111111AB0",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 422
 
     def test_create_administrator_invalid_curp(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating administrator with invalid CURP."""
-        token = create_token(master_admin_account)
         admin_data = {
             "first_name": "Test",
             "last_name": "User",
@@ -350,18 +268,13 @@ class TestAdministratorCreate:
             "rfc": "CURP111111AB0",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 422
 
     def test_create_administrator_invalid_rfc(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating administrator with invalid RFC."""
-        token = create_token(master_admin_account)
         admin_data = {
             "first_name": "Test",
             "last_name": "User",
@@ -378,18 +291,13 @@ class TestAdministratorCreate:
             "rfc": "INVALID",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 422
 
     def test_create_administrator_future_birth_date(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating administrator with future birth date."""
-        token = create_token(master_admin_account)
         future_date = (datetime.now() + timedelta(days=1)).isoformat()
         admin_data = {
             "first_name": "Test",
@@ -407,18 +315,13 @@ class TestAdministratorCreate:
             "rfc": "FUTE111111AB0",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 422
 
     def test_create_administrator_as_regular_admin_forbidden(
-        self, client: TestClient, regular_admin_account: dict
+        self, regular_admin_client: E2ETestClient
     ):
         """Test creating administrator as regular admin."""
-        token = create_token(regular_admin_account)
         admin_data = {
             "first_name": "Test",
             "last_name": "User",
@@ -435,18 +338,13 @@ class TestAdministratorCreate:
             "rfc": "ABCD111111AB0",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = regular_admin_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 403
 
     def test_create_administrator_as_user_forbidden(
-        self, client: TestClient, user_account: dict
+        self, user_client: E2ETestClient
     ):
         """Test creating administrator as user."""
-        token = create_token(user_account)
         admin_data = {
             "first_name": "Test",
             "last_name": "User",
@@ -463,11 +361,7 @@ class TestAdministratorCreate:
             "rfc": "ABCD111111AB0",
         }
 
-        response = client.post(
-            "/api/v1/administrators",
-            json=admin_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = user_client.post("/api/v1/administrators", json=admin_data)
         assert response.status_code == 403
 
 
@@ -476,51 +370,41 @@ class TestAdministratorUpdate:
 
     def test_update_administrator_partial(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Test updating administrator with partial fields actually persists changes."""
-        token = create_token(master_admin_account)
-
-        response = client.patch(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
+        response = master_admin_client.patch(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}",
             json={"first_name": "PartialUpdate"},
-            headers={"Authorization": f"Bearer {token}"},
         )
         print(response.json())
         assert response.status_code == 200
 
-        get_response = client.get(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        get_response = master_admin_client.get(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}"
         )
         assert get_response.status_code == 200
         assert get_response.json()["first_name"] == "PartialUpdate"
 
     def test_update_administrator_full(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Test updating multiple fields at once and verifying persistence."""
-        token = create_token(master_admin_account)
-
-        response = client.patch(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
+        response = master_admin_client.patch(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}",
             json={
                 "first_name": "UpdatedName",
                 "last_name": "UpdatedLast",
                 "phone": "+523312345777",
             },
-            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 200
 
-        get_response = client.get(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        get_response = master_admin_client.get(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}"
         )
         assert get_response.status_code == 200
         data = get_response.json()
@@ -529,95 +413,76 @@ class TestAdministratorUpdate:
 
     def test_update_administrator_deactivate(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Test that deactivating an administrator actually persists."""
-        token = create_token(master_admin_account)
-
-        response = client.patch(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
+        response = master_admin_client.patch(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}",
             json={"is_active": False},
-            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 200
 
-        get_response = client.get(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        get_response = master_admin_client.get(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}"
         )
         assert get_response.status_code == 200
         assert get_response.json()["is_active"] is False
 
     def test_update_administrator_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test updating non-existent administrator."""
-        token = create_token(master_admin_account)
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/administrators/{uuid4()}",
             json={"first_name": "Ghost"},
-            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 404
 
     def test_update_administrator_invalid_email(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Test updating administrator with invalid email."""
-        token = create_token(master_admin_account)
-        response = client.patch(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
+        response = master_admin_client.patch(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}",
             json={"email": "@"},
-            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 422
 
     def test_update_administrator_as_regular_admin_forbidden(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Test updating administrator as regular admin."""
-        token = create_token(regular_admin_account)
-        response = client.patch(
-            f"/api/v1/administrators/{master_admin_account['id']}",
+        response = regular_admin_client.patch(
+            f"/api/v1/administrators/{master_admin_client.account['id']}",
             json={"first_name": "Hacker"},
-            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 403
 
     def test_update_administrator_partial_is_atomic_for_first_name(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Test first_name patch updates only that field and keeps others intact."""
-        token = create_token(master_admin_account)
-
-        before_response = client.get(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        before_response = master_admin_client.get(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}"
         )
         assert before_response.status_code == 200
         before_data = before_response.json()
 
-        patch_response = client.patch(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
+        patch_response = master_admin_client.patch(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}",
             json={"first_name": "AtomicAdminName"},
-            headers={"Authorization": f"Bearer {token}"},
         )
         assert patch_response.status_code == 200
 
-        after_response = client.get(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        after_response = master_admin_client.get(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}"
         )
         assert after_response.status_code == 200
         after_data = after_response.json()
@@ -630,30 +495,24 @@ class TestAdministratorUpdate:
 
     def test_update_administrator_partial_is_atomic_for_is_active(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Test is_active patch updates only status and keeps identity fields intact."""
-        token = create_token(master_admin_account)
-
-        before_response = client.get(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        before_response = master_admin_client.get(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}"
         )
         assert before_response.status_code == 200
         before_data = before_response.json()
 
-        patch_response = client.patch(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
+        patch_response = master_admin_client.patch(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}",
             json={"is_active": False},
-            headers={"Authorization": f"Bearer {token}"},
         )
         assert patch_response.status_code == 200
 
-        after_response = client.get(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        after_response = master_admin_client.get(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}"
         )
         assert after_response.status_code == 200
         after_data = after_response.json()
@@ -696,17 +555,14 @@ class TestAdministratorDelete:
         sensitive = SensitiveData(
             non_critical_data_id=non_critical.id,
             email="todelete@test.com",
-            password_hash=get_password_hash("DeletePass123!"),
+            password="DeletePass123!",
             curp="DELT111111HDFRRL09",
             rfc="DELT111111AB0",
         )
         session.add(sensitive)
         session.flush()
 
-        admin = Administrator(
-            sensitive_data_id=sensitive.id,
-            is_master=False,
-        )
+        admin = Administrator(sensitive_data_id=sensitive.id, is_master=False)
         session.add(admin)
         session.commit()
 
@@ -717,37 +573,34 @@ class TestAdministratorDelete:
         }
 
     def test_delete_administrator_returns_204(
-        self, client: TestClient, master_admin_account: dict, deletable_admin: dict
+        self,
+        master_admin_client: E2ETestClient,
+        deletable_admin: dict,
     ):
         """Test que el endpoint retorna 204 al eliminar correctamente."""
-        token = create_token(master_admin_account)
-        response = client.delete(
-            f"/api/v1/administrators/{deletable_admin['admin_id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        response = master_admin_client.delete(
+            f"/api/v1/administrators/{deletable_admin['admin_id']}"
         )
         assert response.status_code == 204
 
     def test_delete_administrator_is_gone_after_deletion(
-        self, client: TestClient, master_admin_account: dict, deletable_admin: dict
+        self,
+        master_admin_client: E2ETestClient,
+        deletable_admin: dict,
     ):
         """Test que el admin ya no es recuperable tras ser eliminado."""
-        token = create_token(master_admin_account)
-
-        client.delete(
-            f"/api/v1/administrators/{deletable_admin['admin_id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        master_admin_client.delete(
+            f"/api/v1/administrators/{deletable_admin['admin_id']}"
         )
 
-        get_response = client.get(
-            f"/api/v1/administrators/{deletable_admin['admin_id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        get_response = master_admin_client.get(
+            f"/api/v1/administrators/{deletable_admin['admin_id']}"
         )
         assert get_response.status_code == 404
 
     def test_delete_administrator_cascades_related_records(
         self,
-        client: TestClient,
-        master_admin_account: dict,
+        master_admin_client: E2ETestClient,
         deletable_admin: dict,
         session,
     ):
@@ -758,10 +611,8 @@ class TestAdministratorDelete:
             SensitiveData,
         )
 
-        token = create_token(master_admin_account)
-        client.delete(
-            f"/api/v1/administrators/{deletable_admin['admin_id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        master_admin_client.delete(
+            f"/api/v1/administrators/{deletable_admin['admin_id']}"
         )
 
         session.expire_all()
@@ -773,48 +624,41 @@ class TestAdministratorDelete:
         )
 
     def test_delete_administrator_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test deleting non-existent administrator."""
-        token = create_token(master_admin_account)
-        response = client.delete(
-            f"/api/v1/administrators/{uuid4()}",
-            headers={"Authorization": f"Bearer {token}"},
+        response = master_admin_client.delete(
+            f"/api/v1/administrators/{uuid4()}"
         )
         assert response.status_code == 404
 
     def test_delete_administrator_as_regular_admin_forbidden(
         self,
-        client: TestClient,
-        master_admin_account: dict,
-        regular_admin_account: dict,
+        master_admin_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """Regular admin cannot delete administrators."""
-        token = create_token(regular_admin_account)
-        response = client.delete(
-            f"/api/v1/administrators/{master_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        response = regular_admin_client.delete(
+            f"/api/v1/administrators/{master_admin_client.account['id']}"
         )
         assert response.status_code == 403
 
     def test_delete_administrator_as_user_forbidden(
-        self, client: TestClient, user_account: dict, regular_admin_account: dict
+        self,
+        user_client: E2ETestClient,
+        regular_admin_client: E2ETestClient,
     ):
         """User cannot delete administrators."""
-        token = create_token(user_account)
-        response = client.delete(
-            f"/api/v1/administrators/{regular_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        response = user_client.delete(
+            f"/api/v1/administrators/{regular_admin_client.account['id']}"
         )
         assert response.status_code == 403
 
     def test_master_admin_cannot_delete_self(
-            self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can delete its own account under current service behavior."""
-        token = create_token(master_admin_account)
-        response = client.delete(
-            f"/api/v1/administrators/{master_admin_account['id']}",
-            headers={"Authorization": f"Bearer {token}"},
+        response = master_admin_client.delete(
+            f"/api/v1/administrators/{master_admin_client.account['id']}"
         )
         assert response.status_code == 204

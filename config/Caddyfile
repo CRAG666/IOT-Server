@@ -1,0 +1,34 @@
+# Replace {$DOMAIN} with your actual domain in .env (DOMAIN=api.example.com)
+# In local dev without a domain, replace this block with ":80 { reverse_proxy api:8000 }"
+
+{$DOMAIN:api.iotmx.local} {
+    reverse_proxy api:8000 {
+        # Health check so Caddy only routes to healthy containers
+        health_uri /health
+        health_interval 10s
+    }
+
+    # Strip internal headers before forwarding
+    header_up -X-Forwarded-For
+    header_up X-Real-IP {remote_host}
+
+    # Security headers (supplement app-level headers)
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    # Grafana (internal access only — add auth in front for production)
+    handle /grafana/* {
+        reverse_proxy grafana:3000
+    }
+
+    log {
+        output stderr
+        format json
+        level INFO
+    }
+}

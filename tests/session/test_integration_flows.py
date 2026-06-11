@@ -15,8 +15,7 @@ from app.shared.session.exceptions import (
     InvalidKeySessionException,
     InvalidTagException,
     SessionAlreadyExistsException,
-    SessionNotFoundException,
-)
+    SessionNotFoundException)
 from app.shared.session.security import SessionHMAC
 from app.shared.session.service import SessionService
 
@@ -65,8 +64,7 @@ class TestDeviceSessionFlow:
             entity_id=entity_id,
             key_session=key_session,
             ip_address=ip_address,
-            metadata=metadata,
-        )
+            metadata=metadata)
         session_id = response.session_id
         assert isinstance(session_id, str)
         assert len(session_id) > 0
@@ -82,8 +80,7 @@ class TestDeviceSessionFlow:
         retrieved_key = await session_service.process_encrypted_request(
             session_id=session_id,
             tag=tag,
-            payload=payload,
-        )
+            payload=payload)
         assert retrieved_key == key_session
 
         # Step 5: Make multiple requests (simulating normal operation)
@@ -93,8 +90,7 @@ class TestDeviceSessionFlow:
             key = await session_service.process_encrypted_request(
                 session_id=session_id,
                 tag=tag,
-                payload=payload,
-            )
+                payload=payload)
             assert key == key_session
 
         # Step 6: Logout (invalidate session)
@@ -111,8 +107,7 @@ class TestDeviceSessionFlow:
             await session_service.process_encrypted_request(
                 session_id=session_id,
                 tag=tag,
-                payload=payload,
-            )
+                payload=payload)
 
     async def test_device_can_recreate_session_after_logout(
         self, session_service, entity_id, key_session, ip_address
@@ -123,8 +118,7 @@ class TestDeviceSessionFlow:
             entity_id=entity_id,
             key_session=key_session,
             ip_address=ip_address,
-            metadata={"session": "first"},
-        )
+            metadata={"session": "first"})
         session_id_1 = response_1.session_id
 
         # Logout
@@ -136,8 +130,7 @@ class TestDeviceSessionFlow:
             entity_id=entity_id,
             key_session=new_key_session,
             ip_address=ip_address,
-            metadata={"session": "second"},
-        )
+            metadata={"session": "second"})
         session_id_2 = response_2.session_id
 
         # Verify different session IDs
@@ -149,8 +142,7 @@ class TestDeviceSessionFlow:
         key = await session_service.process_encrypted_request(
             session_id=session_id_2,
             tag=tag,
-            payload=payload,
-        )
+            payload=payload)
         assert key == new_key_session
 
 
@@ -173,8 +165,7 @@ class TestApplicationSessionFlow:
             entity_id=app_id,
             key_session=key_session,
             ip_address=ip_address,
-            metadata=metadata,
-        )
+            metadata=metadata)
         session_id = response.session_id
 
         # Make API call
@@ -183,8 +174,7 @@ class TestApplicationSessionFlow:
         key = await session_service.process_encrypted_request(
             session_id=session_id,
             tag=tag,
-            payload=payload,
-        )
+            payload=payload)
         assert key == key_session
 
         # Logout
@@ -195,8 +185,7 @@ class TestApplicationSessionFlow:
             await session_service.process_encrypted_request(
                 session_id=session_id,
                 tag=tag,
-                payload=payload,
-            )
+                payload=payload)
 
 
 class TestMultipleEntitiesFlow:
@@ -214,8 +203,7 @@ class TestMultipleEntitiesFlow:
                 entity_id=entity_id,
                 key_session=key_session,
                 ip_address=ip_address,
-                metadata={"device_number": str(i)},
-            )
+                metadata={"device_number": str(i)})
             session_id = response.session_id
             devices.append({
                 "entity_id": entity_id,
@@ -233,8 +221,7 @@ class TestMultipleEntitiesFlow:
             key = await session_service.process_encrypted_request(
                 session_id=device["session_id"],
                 tag=tag,
-                payload=payload,
-            )
+                payload=payload)
             assert key == device["key_session"]
 
         # Invalidate one device
@@ -254,8 +241,7 @@ class TestMultipleEntitiesFlow:
             key = await session_service.process_encrypted_request(
                 session_id=device["session_id"],
                 tag=tag,
-                payload=payload,
-            )
+                payload=payload)
             assert key == device["key_session"]
 
     async def test_mixed_entity_types_independent(self, session_service):
@@ -267,8 +253,7 @@ class TestMultipleEntitiesFlow:
             entity_id=device_id,
             key_session=device_key,
             ip_address="192.168.1.10",
-            metadata={"type": "device"},
-        )
+            metadata={"type": "device"})
         device_session = device_response.session_id
 
         # Create application session
@@ -278,8 +263,7 @@ class TestMultipleEntitiesFlow:
             entity_id=app_id,
             key_session=app_key,
             ip_address="10.0.0.20",
-            metadata={"type": "application"},
-        )
+            metadata={"type": "application"})
         app_session = app_response.session_id
 
         # Create another entity (simulating user, but using entity session API)
@@ -289,8 +273,7 @@ class TestMultipleEntitiesFlow:
             entity_id=user_id,
             key_session=user_key,
             ip_address="172.16.0.30",
-            metadata={"type": "user"},
-        )
+            metadata={"type": "user"})
         user_session = user_response.session_id
 
         # Verify all three work independently
@@ -306,8 +289,7 @@ class TestMultipleEntitiesFlow:
             key = await session_service.process_encrypted_request(
                 session_id=session_id,
                 tag=tag,
-                payload=payload,
-            )
+                payload=payload)
             assert key == key_session
 
 
@@ -322,8 +304,7 @@ class TestSecurityFlow:
             entity_id=entity_id,
             key_session=key_session,
             ip_address=ip_address,
-            metadata={"test": "tampering"},
-        )
+            metadata={"test": "tampering"})
         session_id = response.session_id
 
         original_payload = "transfer:amount=100"
@@ -333,8 +314,7 @@ class TestSecurityFlow:
         key = await session_service.process_encrypted_request(
             session_id=session_id,
             tag=valid_tag,
-            payload=original_payload,
-        )
+            payload=original_payload)
         assert key == key_session
 
         # Attacker modifies payload
@@ -363,8 +343,7 @@ class TestSecurityFlow:
             entity_id=entity_id,
             key_session=key_session,
             ip_address=ip_address,
-            metadata={"test": "replay"},
-        )
+            metadata={"test": "replay"})
         session_id = response.session_id
 
         # Create valid tag for first payload
@@ -375,8 +354,7 @@ class TestSecurityFlow:
         key = await session_service.process_encrypted_request(
             session_id=session_id,
             tag=tag_1,
-            payload=payload_1,
-        )
+            payload=payload_1)
         assert key == key_session
 
         # Try to reuse tag_1 with different payload_2 (should fail)
@@ -398,8 +376,7 @@ class TestSecurityFlow:
             entity_id=entity_1,
             key_session=key_1,
             ip_address=ip_1,
-            metadata={"entity": "1"},
-        )
+            metadata={"entity": "1"})
         session_1 = response_1.session_id
 
         entity_2 = uuid.uuid4()
@@ -409,8 +386,7 @@ class TestSecurityFlow:
             entity_id=entity_2,
             key_session=key_2,
             ip_address=ip_2,
-            metadata={"entity": "2"},
-        )
+            metadata={"entity": "2"})
         session_2 = response_2.session_id
 
         # Verify entity_1 cannot use entity_2's credentials
@@ -433,8 +409,7 @@ class TestSecurityFlow:
             await session_service.process_encrypted_request(
                 session_id=session_2,
                 tag=wrong_tag,  # Computed with wrong key
-                payload=payload,
-            )
+                payload=payload)
 
 
 class TestErrorFlow:
@@ -449,8 +424,7 @@ class TestErrorFlow:
             entity_id=entity_id,
             key_session=key_session,
             ip_address=ip_address,
-            metadata={"session": "first"},
-        )
+            metadata={"session": "first"})
 
         # Try to create second session (should fail)
         new_key = urlsafe_b64encode(token_bytes(32)).decode("ascii")
@@ -459,8 +433,7 @@ class TestErrorFlow:
                 entity_id=entity_id,
                 key_session=new_key,
                 ip_address=ip_address,
-                metadata={"session": "second"},
-            )
+                metadata={"session": "second"})
 
     async def test_invalid_key_session_rejected(
         self, session_service, entity_id, ip_address
@@ -472,8 +445,7 @@ class TestErrorFlow:
                 entity_id=entity_id,
                 key_session="short",
                 ip_address=ip_address,
-                metadata={},
-            )
+                metadata={})
 
         # Invalid base64
         with pytest.raises(InvalidKeySessionException):
@@ -481,8 +453,7 @@ class TestErrorFlow:
                 entity_id=entity_id,
                 key_session="not!!!valid!!!base64!!!format!!!here",
                 ip_address=ip_address,
-                metadata={},
-            )
+                metadata={})
 
     async def test_nonexistent_session_operations_fail(self, session_service):
         """Test: Operations on nonexistent sessions fail gracefully."""
@@ -501,8 +472,7 @@ class TestErrorFlow:
             await session_service.process_encrypted_request(
                 session_id=fake_session_id,
                 tag=tag,
-                payload=payload,
-            )
+                payload=payload)
 
         # Invalidate is idempotent (doesn't raise)
         await session_service.invalidate_entity_session(fake_entity_id)
@@ -519,8 +489,7 @@ class TestSessionPersistence:
             entity_id=entity_id,
             key_session=key_session,
             ip_address=ip_address,
-            metadata={"test": "persistence"},
-        )
+            metadata={"test": "persistence"})
         session_id = response.session_id
 
         # Simulate 20 sequential requests
@@ -530,8 +499,7 @@ class TestSessionPersistence:
             key = await session_service.process_encrypted_request(
                 session_id=session_id,
                 tag=tag,
-                payload=payload,
-            )
+                payload=payload)
             assert key == key_session
 
         # Verify session still active
@@ -552,8 +520,7 @@ class TestSessionPersistence:
             entity_id=entity_id,
             key_session=key_session,
             ip_address=ip_address,
-            metadata=original_metadata,
-        )
+            metadata=original_metadata)
         session_id = response.session_id
 
         # Make several requests
@@ -563,8 +530,7 @@ class TestSessionPersistence:
             await session_service.process_encrypted_request(
                 session_id=session_id,
                 tag=tag,
-                payload=payload,
-            )
+                payload=payload)
 
         # Metadata should still be intact (this would require adding a get method,
         # but we can verify session still works which implies metadata is preserved)

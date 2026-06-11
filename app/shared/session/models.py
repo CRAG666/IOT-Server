@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_serializer
 
@@ -32,7 +32,7 @@ class UserData(BaseModel):
     email: str
     account_type: str
     is_master: bool
-    token_id: Optional[str] = None
+    token_id: str | None = None
 
 
 class EntitySessionData(BaseModel):

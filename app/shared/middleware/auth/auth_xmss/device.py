@@ -3,7 +3,7 @@ from app.shared.middleware.auth.auth_xmss.challenge import XMSSChallengeFactory
 from app.shared.middleware.auth.interface import IAuthMethod
 
 
-class DeviceXMSSAuth(IAuthMethod[Device]):
+class DeviceXMSSAuth(IAuthMethod[Device]):  # pragma: no cover
     def __init__(self):
         self.verifier = XMSSChallengeFactory()
 

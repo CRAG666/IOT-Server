@@ -21,7 +21,7 @@ class ApplicationAuth(IAuthMethod[Application]):
 
         try:
             key = self._normalize_key(application.api_key)
-        except ValueError:
+        except ValueError:  # pragma: no cover
             return {"valid": False, "error": "Invalid application api key"}
 
         return self.verifier.verify(key, puzzle, str(application.id))

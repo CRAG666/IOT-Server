@@ -1,6 +1,6 @@
 from abc import ABC
 from enum import Enum
-from typing import Type
+from typing import Any, ClassVar, Type
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.shared.pagination import PageParams, PageResponse
 from app.shared.rate_limit import enforce_request_rate_limit
-from typing import Any, ClassVar
+from app.shared.authorization.dependencies import require_read, require_write, require_delete
 
 
 class BaseApiController(ABC):
@@ -20,6 +20,11 @@ class BaseApiController(ABC):
     prefix: str
     tags: list[str | Enum] | None = None
 
+    # Set model_class to enable automatic CRUD→Casbin permission wiring.
+    # list/retrieve → read, create/update → write, delete → delete.
+    # Override individual *_dependencies to deviate from these defaults.
+    model_class: ClassVar[type | None] = None
+
     router_dependencies: list | None = None
     list_dependencies: list | None = None
     retrieve_dependencies: list | None = None
@@ -28,6 +33,19 @@ class BaseApiController(ABC):
     delete_dependencies: list | None = None
 
     def __init__(self):
+        if self.model_class is not None:
+            mc = self.model_class
+            if self.list_dependencies is None:
+                self.list_dependencies = [require_read(mc)]
+            if self.retrieve_dependencies is None:
+                self.retrieve_dependencies = [require_read(mc)]
+            if self.create_dependencies is None:
+                self.create_dependencies = [require_write(mc)]
+            if self.update_dependencies is None:
+                self.update_dependencies = [require_write(mc)]
+            if self.delete_dependencies is None:
+                self.delete_dependencies = [require_delete(mc)]
+
         self.router = APIRouter(
             prefix=self.prefix,
             tags=self.tags or [self.prefix.strip("/").title()],
@@ -36,7 +54,7 @@ class BaseApiController(ABC):
         self._register_routes()
 
     def _register_routes(self):
-        pass
+        pass  # pragma: no cover
 
 
 class ReadOnlyApiController(BaseApiController):

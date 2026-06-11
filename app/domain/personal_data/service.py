@@ -10,6 +10,7 @@ from app.domain.personal_data.non_critical_personal_data_service import (
 from app.domain.personal_data.sensitive_data_service import SensitiveDataService
 from app.domain.personal_data.schemas import PersonalDataCreate, PersonalDataUpdate
 from app.shared.base_domain.service import BaseService
+from app.shared.exceptions import AlreadyExistsException
 
 T = TypeVar("T", bound=PersonalData)
 
@@ -26,6 +27,8 @@ class PersonalDataService(
 
     @override
     def create_entity(self, payload: PersonalDataCreate) -> T:
+        if self.sensitive_data_service.email_exists(payload.email):
+            raise AlreadyExistsException("Account", "email", payload.email)
         non_critical_personal_data = (
             self.non_critical_personal_data_service.create_entity(payload)
         )

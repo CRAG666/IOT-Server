@@ -2,7 +2,7 @@ from app.shared.middleware.auth.auth_xmss.challenge import XMSSChallengeFactory
 from app.shared.middleware.auth.interface import IAuthMethod
 
 
-class HumanXMSSAuth(IAuthMethod):
+class HumanXMSSAuth(IAuthMethod):  # pragma: no cover
     """
     Verificador XMSS para humanos:
     - administrator

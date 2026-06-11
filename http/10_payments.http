@@ -1,0 +1,163 @@
+# =============================================================================
+# IoTmx API — Payments, Subscription Types & User-Service assignments
+# Required role: administrator (full), manager/user (read)
+#
+# Login first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url           = http://localhost:8000
+@session_id         = REPLACE_WITH_SESSION_ID
+@payment_id         = REPLACE_WITH_PAYMENT_UUID
+@subscription_id    = REPLACE_WITH_SUBSCRIPTION_TYPE_UUID
+@user_service_id    = REPLACE_WITH_USER_SERVICE_UUID
+@user_id            = REPLACE_WITH_USER_UUID
+@service_id         = REPLACE_WITH_SERVICE_UUID
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Payments
+# ─────────────────────────────────────────────────────────────────────────────
+
+### List all payments
+# e2e.py: uv run python http/e2e.py get "/api/v1/payments?offset=0&limit=20"
+GET {{base_url}}/api/v1/payments?offset=0&limit=20
+X-Session-ID: {{session_id}}
+
+###
+
+### Get payment by ID
+# e2e.py: uv run python http/e2e.py get /api/v1/payments/{{payment_id}}
+GET {{base_url}}/api/v1/payments/{{payment_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Create payment
+# e2e.py: uv run python http/e2e.py post /api/v1/payments \
+#   '{"user_service_id":"USER_SVC_UUID","subscription_type_id":"SUB_TYPE_UUID","deposit_id":"DEP_UUID","amount":"99.99"}'
+#
+# Plaintext body shape:
+# {
+#   "user_service_id":       "<UUID>",   // required — UserService record
+#   "subscription_type_id":  "<UUID>",   // required — SubscriptionType record
+#   "deposit_id":            "<UUID>",   // required — deposit transaction reference
+#   "amount":                "99.99"     // required — use string to preserve precision
+# }
+POST {{base_url}}/api/v1/payments
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Update payment (all fields optional)
+# e2e.py: uv run python http/e2e.py patch /api/v1/payments/{{payment_id}} \
+#   '{"amount":"109.99"}'
+PATCH {{base_url}}/api/v1/payments/{{payment_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete payment
+# e2e.py: uv run python http/e2e.py delete /api/v1/payments/{{payment_id}}
+DELETE {{base_url}}/api/v1/payments/{{payment_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Get payment history for a payment
+# e2e.py: uv run python http/e2e.py get /api/v1/payments/{{payment_id}}/history
+GET {{base_url}}/api/v1/payments/{{payment_id}}/history
+X-Session-ID: {{session_id}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Subscription types
+# ─────────────────────────────────────────────────────────────────────────────
+
+### List all subscription types
+# e2e.py: uv run python http/e2e.py get /api/v1/payments/subscription-types
+GET {{base_url}}/api/v1/payments/subscription-types
+X-Session-ID: {{session_id}}
+
+###
+
+### Get subscription type by ID
+# e2e.py: uv run python http/e2e.py get /api/v1/payments/subscription-types/{{subscription_id}}
+GET {{base_url}}/api/v1/payments/subscription-types/{{subscription_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Create subscription type
+# e2e.py: uv run python http/e2e.py post /api/v1/payments/subscription-types \
+#   '{"type":"monthly","cost":"29.99"}'
+#
+# Plaintext body:
+# {
+#   "type": "monthly",   // required — subscription plan name
+#   "cost": "29.99"      // required — use string for Decimal precision
+# }
+POST {{base_url}}/api/v1/payments/subscription-types
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Update subscription type (all fields optional)
+# e2e.py: uv run python http/e2e.py patch /api/v1/payments/subscription-types/{{subscription_id}} \
+#   '{"cost":"34.99"}'
+PATCH {{base_url}}/api/v1/payments/subscription-types/{{subscription_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete subscription type
+# e2e.py: uv run python http/e2e.py delete /api/v1/payments/subscription-types/{{subscription_id}}
+DELETE {{base_url}}/api/v1/payments/subscription-types/{{subscription_id}}
+X-Session-ID: {{session_id}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# User ↔ Service assignments
+# Active payment → service enabled; expired payment → service disabled.
+# ─────────────────────────────────────────────────────────────────────────────
+
+### List services for a user (includes subscription/payment status)
+# e2e.py: uv run python http/e2e.py get /api/v1/payments/user-services/user/{{user_id}}
+GET {{base_url}}/api/v1/payments/user-services/user/{{user_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### List users for a service (includes subscription/payment status)
+# e2e.py: uv run python http/e2e.py get /api/v1/payments/user-services/service/{{service_id}}
+GET {{base_url}}/api/v1/payments/user-services/service/{{service_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Assign user to service (creates UserService record)
+# e2e.py: uv run python http/e2e.py post /api/v1/payments/user-services/{{user_id}}/{{service_id}} '{}'
+POST {{base_url}}/api/v1/payments/user-services/{{user_id}}/{{service_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Unassign user from service
+# e2e.py: uv run python http/e2e.py delete /api/v1/payments/user-services/{{user_id}}/{{service_id}}
+DELETE {{base_url}}/api/v1/payments/user-services/{{user_id}}/{{service_id}}
+X-Session-ID: {{session_id}}

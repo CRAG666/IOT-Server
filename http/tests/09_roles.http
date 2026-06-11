@@ -1,0 +1,75 @@
+### List roles
+# @expect 200
+GET /api/v1/roles/
+
+### Create role (requires service_id)
+# Role name must be letters only — no digits or spaces
+# @expect 201
+# @capture new_role_id $.id
+# @assert $.name EtoeRole
+# @assert $.is_active true
+POST /api/v1/roles/
+
+{
+  "name": "EtoeRole",
+  "description": "E2E test role",
+  "service_id": "{{new_service_id}}",
+  "is_active": true
+}
+
+### Get role by ID
+# @expect 200
+# @assert $.id {{new_role_id}}
+# @assert $.name EtoeRole
+GET /api/v1/roles/{{new_role_id}}
+
+### Update role description
+# @expect 200
+PATCH /api/v1/roles/{{new_role_id}}
+
+{"description": "Updated E2E role description"}
+
+### Restore description
+# @expect 200
+PATCH /api/v1/roles/{{new_role_id}}
+
+{"description": "E2E test role"}
+
+### List users in role — empty initially
+# @expect 200
+GET /api/v1/roles/{{new_role_id}}/users
+
+### Assign user to role via role endpoint
+# @expect 201
+# @capture new_user_role_id $.id
+# @assert $.user_id {{new_user_id}}
+# @assert $.role_id {{new_role_id}}
+POST /api/v1/roles/{{new_role_id}}/users
+
+{"user_id": "{{new_user_id}}"}
+
+### List users in role — now includes the user
+# @expect 200
+GET /api/v1/roles/{{new_role_id}}/users
+
+### List roles for user — should include our role
+# @expect 200
+GET /api/v1/users/{{new_user_id}}/roles
+
+### Get non-existent role — 404
+# @expect 404
+GET /api/v1/roles/00000000-0000-0000-0000-000000000006
+
+### Deactivate role
+# @expect 200
+# @assert $.is_active false
+PATCH /api/v1/roles/{{new_role_id}}
+
+{"is_active": false}
+
+### Reactivate role
+# @expect 200
+# @assert $.is_active true
+PATCH /api/v1/roles/{{new_role_id}}
+
+{"is_active": true}

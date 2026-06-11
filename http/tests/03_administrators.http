@@ -1,0 +1,61 @@
+### List administrators — master admin can read
+# @expect 200
+# @capture admin_total $.total
+GET /api/v1/administrators/
+
+### Create administrator
+# CURP GOMA850315HDFXYZ05 — valid check digit (computed from prefix)
+# @expect 201
+# @capture new_admin_id $.id
+# @assert $.first_name E2EAdmin
+# @assert $.is_active true
+POST /api/v1/administrators/
+
+{
+  "first_name": "E2EAdmin",
+  "last_name": "Test",
+  "second_last_name": "Suite",
+  "phone": "+523312345680",
+  "address": "100 Integration Test Ave",
+  "city": "Mexico City",
+  "state": "CDMX",
+  "postal_code": "06600",
+  "birth_date": "1985-03-15T00:00:00",
+  "email": "e2e.admin@iotmx.test",
+  "password": "E2eAdmin1!",
+  "curp": "GOMA850315HDFXYZ05",
+  "rfc": "GOMA850315AB1"
+}
+
+### Get administrator by ID
+# @expect 200
+# @assert $.id {{new_admin_id}}
+# @assert $.first_name E2EAdmin
+GET /api/v1/administrators/{{new_admin_id}}
+
+### Update administrator — change first name
+# @expect 200
+# @assert $.first_name E2EAdminUpd
+PATCH /api/v1/administrators/{{new_admin_id}}
+
+{"first_name": "E2EAdminUpd"}
+
+### Get updated administrator — verify change persisted
+# @expect 200
+# @assert $.first_name E2EAdminUpd
+GET /api/v1/administrators/{{new_admin_id}}
+
+### Restore original first name
+# @expect 200
+# @assert $.first_name E2EAdmin
+PATCH /api/v1/administrators/{{new_admin_id}}
+
+{"first_name": "E2EAdmin"}
+
+### List administrators — total should have grown by 1
+# @expect 200
+GET /api/v1/administrators/
+
+### Get non-existent administrator — 404
+# @expect 404
+GET /api/v1/administrators/00000000-0000-0000-0000-000000000000

@@ -1,37 +1,196 @@
-version: '3.8'
-
 services:
+
+  # ── Caddy (reverse proxy + automatic TLS) ────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+  # ── API ───────────────────────────────────────────────────────────────────────
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://iot:${POSTGRES_PASSWORD}@postgres:5432/iot_db
+      VALKEY_URL: redis://valkey:6379/0
+      MONGODB_URL: mongodb://mongodb:27017
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_ENABLED: "true"
+      DEBUG: "false"
+      METRICS_ENABLED: "true"
+      OTEL_ENABLED: "${OTEL_ENABLED:-false}"
+      OTEL_ENDPOINT: "http://otel-collector:4317"
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    deploy:
+      replicas: ${API_REPLICAS:-1}
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: iot-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: iot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: iot_db
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U iot -d iot_db"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
+  # ── Valkey (Redis-compatible session store + rate limiter) ────────────────────
   valkey:
     image: valkey/valkey:7.2-alpine
-    container_name: iot-valkey
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
     volumes:
       - valkey_data:/data
-    command: valkey-server --appendonly yes
+    command: >
+      valkey-server
+        --appendonly yes
+        --save 60 1
+        --loglevel warning
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+
+  # ── MongoDB (device telemetry — non-relational store) ────────────────────────
+  mongodb:
+    image: mongo:7-jammy
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: iot
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD must be set in .env}
+      MONGO_INITDB_DATABASE: iotmx
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Mosquitto (MQTT broker for device connectivity) ───────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./config/mosquitto_passwd:/mosquitto/config/passwd:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    ports:
+      - "1883:1883"
+
+  # ── Prometheus (metrics scraping) ────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    expose:
+      - "9090"
+
+  # ── Grafana (metrics dashboards) ─────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    expose:
+      - "3000"
+    depends_on:
+      - prometheus
+
+  # ── OpenTelemetry Collector (tracing) ────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.112.0
+    restart: unless-stopped
+    volumes:
+      - ./config/otel-collector.yml:/etc/otel-collector.yml:ro
+    command: ["--config=/etc/otel-collector.yml"]
+    expose:
+      - "4317"
+    profiles:
+      - otel
+
+  # ── Backup (nightly pg_dump + MongoDB dump to volume) ────────────────────────
+  backup:
+    image: alpine:3.21
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: iot
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: iot_db
+      MONGO_HOST: mongodb
+      MONGO_USER: iot
+      MONGO_PASSWORD: ${MONGO_PASSWORD}
+      BACKUP_KEEP_DAYS: "7"
+    volumes:
+      - backup_data:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    command: >
+      sh -c "apk add --no-cache postgresql-client mongodb-tools &&
+             crond -f -d 6 -c /var/spool/cron/crontabs"
+    entrypoint: >
+      sh -c "apk add --no-cache postgresql-client mongodb-tools &&
+             mkdir -p /var/spool/cron/crontabs &&
+             echo '0 2 * * * /backup.sh >> /backups/backup.log 2>&1' > /var/spool/cron/crontabs/root &&
+             crond -f -d 6"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
 
 volumes:
   postgres_data:
   valkey_data:
+  mongodb_data:
+  mosquitto_data:
+  mosquitto_log:
+  prometheus_data:
+  grafana_data:
+  backup_data:
+  caddy_data:
+  caddy_config:

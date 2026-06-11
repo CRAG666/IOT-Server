@@ -1,406 +1,109 @@
+"""Tests for the E2E login endpoint (POST /api/v1/auth/login) — protocol v2."""
+
+import base64
+import json
+import secrets
+
+import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.config import settings
-from app.shared.auth.service import get_shared_auth_service
+from app.domain.auth.controller import _get_session_repo
+from app.shared.crypto import aes_encrypt, derive_temp_key, sha256_hex, generate_salt
+from app.shared.e2e.session import E2ESessionRepository
 
 
-class StubAuthService:
-    def __init__(self):
-        self.calls: list[tuple[str, object, bool | None]] = []
+@pytest.fixture
+def fake_session_repo():
+    """Provide a fakeredis-backed E2ESessionRepository for login tests."""
+    fake_client = fakeredis.FakeAsyncValkey(decode_responses=True)
+    repo = E2ESessionRepository("redis://localhost:6379/0")
+    repo.client = fake_client
+    repo._external_client = True  # prevent close() from nullifying .client between requests
 
-    def login_human_rc(self, payload, expected_is_master=None):
-        self.calls.append(("login_human_rc", payload, expected_is_master))
-        return {
-            "access_token": "token",
-            "token_type": "bearer",
-            "account_type": payload.entity_type,
-            "auth_method": "auth_rc",
-            "is_master": expected_is_master is True,
-        }
+    def override():
+        return repo
 
-    def create_xmss_challenge(self, payload, expected_is_master=None):
-        self.calls.append(("create_xmss_challenge", payload, expected_is_master))
-        return {
-            "auth_method": "auth_xmss",
-            "entity_type": payload.entity_type,
-            "identifier": payload.identifier,
-            "challenge": "challenge",
-            "leaf_index": 0,
-            "expires_at": 1234567890,
-            "public_root": "root",
-            "canonical_message": {"identifier": payload.identifier},
-            "client_material_compact": None,
-        }
-
-    def verify_xmss(self, payload, expected_is_master=None):
-        self.calls.append(("verify_xmss", payload, expected_is_master))
-        return {
-            "access_token": "token",
-            "token_type": "bearer",
-            "account_type": payload.entity_type,
-            "auth_method": "auth_xmss",
-            "is_master": expected_is_master is True,
-        }
-
-    def login_device_rc(self, payload):
-        self.calls.append(("login_device_rc", payload, None))
-        return {
-            "access_token": "token",
-            "token_type": "bearer",
-            "account_type": "device",
-            "auth_method": "auth_rc",
-            "is_master": False,
-        }
-
-    def login_application_rc(self, payload):
-        self.calls.append(("login_application_rc", payload, None))
-        return {
-            "access_token": "token",
-            "token_type": "bearer",
-            "account_type": "application",
-            "auth_method": "auth_rc",
-            "is_master": False,
-        }
+    app.dependency_overrides[_get_session_repo] = override
+    yield repo
+    app.dependency_overrides.pop(_get_session_repo, None)
 
 
-def _override_service():
-    service = StubAuthService()
-    app.dependency_overrides[get_shared_auth_service] = lambda: service
-    return service
-
-
-def _clear_override():
-    app.dependency_overrides.pop(get_shared_auth_service, None)
-
-
-@pytest.fixture(autouse=True)
-def auth_policy_defaults(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(settings, "AUTH_ADMINISTRATOR_METHOD", "auth_xmss")
-    monkeypatch.setattr(settings, "AUTH_MANAGER_METHOD", "auth_rc")
-    monkeypatch.setattr(settings, "AUTH_USER_METHOD", "auth_rc")
-    monkeypatch.setattr(settings, "AUTH_DEVICE_METHOD", "auth_rc")
-    monkeypatch.setattr(settings, "AUTH_APPLICATION_METHOD", "auth_xmss")
-
-
-class TestHumanAuthSplitRoutes:
-    @pytest.mark.parametrize(
-        ("path", "email", "expected_entity_type", "expected_is_master"),
-        [
-            ("/api/v1/auth-rc/user/login", "USER@TEST.COM", "user", None),
-            ("/api/v1/auth-rc/manager/login", "MANAGER@TEST.COM", "manager", None),
-        ],
+def _do_login(client: TestClient, email: str, salted_hash: str, salt: str) -> "Response":
+    """Helper: call /auth/login with the v2 protocol."""
+    random_hex = secrets.token_hex(16)
+    random2 = secrets.token_hex(32)
+    temp_key = derive_temp_key(salted_hash, random_hex, salt)
+    inner_plain = json.dumps({"random2": random2}).encode()
+    ciphertext, iv = aes_encrypt(inner_plain, temp_key)
+    return client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": email,
+            "payload": base64.b64encode(ciphertext).decode(),
+            "random": random_hex,
+            "iv": base64.b64encode(iv).decode(),
+        },
     )
-    def test_auth_rc_login_allows_configured_entities(
-        self,
-        client: TestClient,
-        path: str,
-        email: str,
-        expected_entity_type: str,
-        expected_is_master: bool | None,
-    ):
-        service = _override_service()
 
-        try:
-            response = client.post(
-                path,
-                json={
-                    "email": email,
-                    "password": "Password123!",
-                },
-            )
-        finally:
-            _clear_override()
+
+def _get_salt(client: TestClient, email: str) -> str:
+    """Fetch the per-user salt via /auth/challenge."""
+    resp = client.get(f"/api/v1/auth/challenge?email={email}")
+    assert resp.status_code == 200
+    return resp.json()["salt"]
+
+
+class TestLoginEndpoint:
+    """Full E2E login handshake tests (v2: AES-GCM + HKDF + salted passwords)."""
+
+    def test_login_success_returns_payload_and_iv(
+        self, client: TestClient, master_admin_account: dict, fake_session_repo
+    ):
+        """A valid login returns an encrypted payload and iv."""
+        password = master_admin_account["password"]
+        email = master_admin_account["email"]
+
+        salt = _get_salt(client, email)
+        salted_hash = sha256_hex(salt + sha256_hex(password))
+
+        response = _do_login(client, email, salted_hash, salt)
 
         assert response.status_code == 200
-        call_name, payload, actual_is_master = service.calls[-1]
-        assert call_name == "login_human_rc"
-        assert payload.entity_type == expected_entity_type
-        assert payload.email == email.lower()
-        assert actual_is_master is expected_is_master
+        data = response.json()
+        assert "payload" in data
+        assert "iv" in data
 
-    @pytest.mark.parametrize(
-        ("path", "email"),
-        [
-            ("/api/v1/auth-rc/admin/login", "regular_admin@test.com"),
-            ("/api/v1/auth-rc/master/login", "MASTER_ADMIN@TEST.COM"),
-        ],
-    )
-    def test_auth_rc_login_rejects_entities_configured_for_other_method(
-        self,
-        client: TestClient,
-        path: str,
-        email: str,
+    def test_login_wrong_password_returns_401(
+        self, client: TestClient, master_admin_account: dict, fake_session_repo
     ):
-        service = _override_service()
+        """Wrong password derives a wrong temp_key → AES-GCM tag failure → 401."""
+        email = master_admin_account["email"]
+        salt = _get_salt(client, email)
+        # Use wrong password to compute salted_hash
+        wrong_salted = sha256_hex(salt + sha256_hex("WrongPassword!"))
+        response = _do_login(client, email, wrong_salted, salt)
+        assert response.status_code == 401
 
-        try:
-            response = client.post(
-                path,
-                json={
-                    "email": email,
-                    "password": "Password123!",
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 403
-        assert service.calls == []
-
-    @pytest.mark.parametrize(
-        (
-            "path",
-            "identifier",
-            "expected_entity_type",
-            "expected_is_master",
-        ),
-        [
-            ("/api/v1/auth-xmss/admin/challenge", "ADMIN@TEST.COM", "administrator", False),
-            ("/api/v1/auth-xmss/master/challenge", "MASTER_ADMIN@TEST.COM", "administrator", True),
-        ],
-    )
-    def test_auth_xmss_challenge_allows_configured_entities(
-        self,
-        client: TestClient,
-        path: str,
-        identifier: str,
-        expected_entity_type: str,
-        expected_is_master: bool | None,
+    def test_login_unknown_username_returns_401(
+        self, client: TestClient, fake_session_repo
     ):
-        service = _override_service()
+        """Non-existent user returns 401 (challenge returns a fake salt)."""
+        ch = client.get("/api/v1/auth/challenge?email=nobody@nowhere.com")
+        assert ch.status_code == 200
+        fake_salt = ch.json()["salt"]
+        fake_hash = sha256_hex(fake_salt + sha256_hex("anything"))
+        response = _do_login(client, "nobody@nowhere.com", fake_hash, fake_salt)
+        assert response.status_code == 401
 
-        try:
-            response = client.post(
-                path,
-                json={
-                    "identifier": identifier,
-                    "password": "XmssPassword123!",
-                    "tree_height": 6,
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 200
-        call_name, payload, actual_is_master = service.calls[-1]
-        assert call_name == "create_xmss_challenge"
-        assert payload.entity_type == expected_entity_type
-        assert payload.identifier == identifier.lower()
-        assert payload.password == "XmssPassword123!"
-        assert payload.tree_height == 6
-        assert actual_is_master is expected_is_master
-
-    @pytest.mark.parametrize(
-        ("path", "identifier"),
-        [
-            ("/api/v1/auth-xmss/user/challenge", "USER@TEST.COM"),
-            ("/api/v1/auth-xmss/manager/challenge", "MANAGER@TEST.COM"),
-        ],
-    )
-    def test_auth_xmss_challenge_rejects_entities_configured_for_rc(
-        self,
-        client: TestClient,
-        path: str,
-        identifier: str,
+    def test_login_inactive_user_returns_401(
+        self, client: TestClient, inactive_user_account: dict, fake_session_repo
     ):
-        service = _override_service()
-
-        try:
-            response = client.post(
-                path,
-                json={
-                    "identifier": identifier,
-                    "password": "XmssPassword123!",
-                    "tree_height": 6,
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 403
-        assert service.calls == []
-
-    @pytest.mark.parametrize(
-        (
-            "path",
-            "identifier",
-            "expected_entity_type",
-            "expected_is_master",
-        ),
-        [
-            ("/api/v1/auth-xmss/admin/verify", "ADMIN@TEST.COM", "administrator", False),
-            ("/api/v1/auth-xmss/master/verify", "MASTER_ADMIN@TEST.COM", "administrator", True),
-        ],
-    )
-    def test_auth_xmss_verify_allows_configured_entities(
-        self,
-        client: TestClient,
-        path: str,
-        identifier: str,
-        expected_entity_type: str,
-        expected_is_master: bool | None,
-    ):
-        service = _override_service()
-
-        try:
-            response = client.post(
-                path,
-                json={
-                    "identifier": identifier,
-                    "challenge": "challenge",
-                    "leaf_index": 0,
-                    "message": {"challenge": "challenge"},
-                    "signature": {},
-                    "auth_path": [],
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 200
-        call_name, payload, actual_is_master = service.calls[-1]
-        assert call_name == "verify_xmss"
-        assert payload.entity_type == expected_entity_type
-        assert payload.identifier == identifier.lower()
-        assert actual_is_master is expected_is_master
-
-    @pytest.mark.parametrize(
-        ("path", "identifier"),
-        [
-            ("/api/v1/auth-xmss/user/verify", "USER@TEST.COM"),
-            ("/api/v1/auth-xmss/manager/verify", "MANAGER@TEST.COM"),
-        ],
-    )
-    def test_auth_xmss_verify_rejects_entities_configured_for_rc(
-        self,
-        client: TestClient,
-        path: str,
-        identifier: str,
-    ):
-        service = _override_service()
-
-        try:
-            response = client.post(
-                path,
-                json={
-                    "identifier": identifier,
-                    "challenge": "challenge",
-                    "leaf_index": 0,
-                    "message": {"challenge": "challenge"},
-                    "signature": {},
-                    "auth_path": [],
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 403
-        assert service.calls == []
-
-
-class TestEntityAuthPolicyRoutes:
-    def test_auth_rc_device_login_allowed_by_policy(self, client: TestClient):
-        service = _override_service()
-
-        try:
-            response = client.post(
-                "/api/v1/auth-rc/devices/login",
-                json={
-                    "identifier": "device-123",
-                    "encrypted_payload": {
-                        "ciphertext": "abc",
-                        "iv": "def",
-                    },
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 200
-        call_name, payload, _ = service.calls[-1]
-        assert call_name == "login_device_rc"
-        assert payload.identifier == "device-123"
-
-    def test_auth_rc_application_login_rejected_by_policy(self, client: TestClient):
-        service = _override_service()
-
-        try:
-            response = client.post(
-                "/api/v1/auth-rc/applications/login",
-                json={
-                    "identifier": "app-123",
-                    "encrypted_payload": {
-                        "ciphertext": "abc",
-                        "iv": "def",
-                    },
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 403
-        assert service.calls == []
-
-    def test_auth_xmss_device_challenge_rejected_by_policy(self, client: TestClient):
-        service = _override_service()
-
-        try:
-            response = client.post(
-                "/api/v1/auth-xmss/devices/challenge",
-                json={
-                    "entity_type": "device",
-                    "identifier": "device-123",
-                    "tree_height": 4,
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 403
-        assert service.calls == []
-
-    def test_auth_xmss_application_challenge_allowed_by_policy(self, client: TestClient):
-        service = _override_service()
-
-        try:
-            response = client.post(
-                "/api/v1/auth-xmss/applications/challenge",
-                json={
-                    "entity_type": "application",
-                    "identifier": "app-123",
-                    "tree_height": 4,
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 200
-        call_name, payload, _ = service.calls[-1]
-        assert call_name == "create_xmss_challenge"
-        assert payload.entity_type == "application"
-
-    def test_auth_xmss_application_verify_allowed_by_policy(self, client: TestClient):
-        service = _override_service()
-
-        try:
-            response = client.post(
-                "/api/v1/auth-xmss/applications/verify",
-                json={
-                    "entity_type": "application",
-                    "identifier": "app-123",
-                    "challenge": "challenge",
-                    "leaf_index": 0,
-                    "message": {"challenge": "challenge"},
-                    "signature": {},
-                    "auth_path": [],
-                },
-            )
-        finally:
-            _clear_override()
-
-        assert response.status_code == 200
-        call_name, payload, _ = service.calls[-1]
-        assert call_name == "verify_xmss"
-        assert payload.entity_type == "application"
+        """Inactive account is rejected even with correct password."""
+        password = inactive_user_account["password"]
+        email = inactive_user_account["email"]
+        salt = _get_salt(client, email)
+        salted_hash = sha256_hex(salt + sha256_hex(password))
+        response = _do_login(client, email, salted_hash, salt)
+        assert response.status_code == 401

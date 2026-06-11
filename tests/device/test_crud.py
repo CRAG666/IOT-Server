@@ -1,43 +1,18 @@
 import pytest
 from fastapi.testclient import TestClient
-import jwt
-from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from app.config import settings
-
-
-def create_token(account_data: dict) -> str:
-    """Create a valid JWT token for testing."""
-    to_encode = {
-        "sub": str(account_data["id"]),
-        "email": account_data["email"],
-        "type": account_data["account_type"],
-        "is_master": account_data["is_master"],
-    }
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    to_encode.update({"exp": expire})
-    return jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-    )
+from tests.e2e_client import E2ETestClient
 
 
 class TestDeviceList:
     """Test GET /devices endpoint."""
 
     def test_list_devices_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test listing devices as master admin."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/devices",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/devices")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
@@ -45,42 +20,30 @@ class TestDeviceList:
         assert isinstance(data["data"], list)
 
     def test_list_devices_as_regular_admin(
-        self, client: TestClient, regular_admin_account: dict
+        self, regular_admin_client: E2ETestClient
     ):
         """Test listing devices as regular admin."""
-        token = create_token(regular_admin_account)
-        response = client.get(
-            "/api/v1/devices",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = regular_admin_client.get("/api/v1/devices")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
         assert "data" in data
 
     def test_list_devices_as_manager(
-        self, client: TestClient, manager_account: dict
+        self, manager_client: E2ETestClient
     ):
         """Test listing devices as manager."""
-        token = create_token(manager_account)
-        response = client.get(
-            "/api/v1/devices",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = manager_client.get("/api/v1/devices")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
         assert "data" in data
 
     def test_list_devices_as_user(
-        self, client: TestClient, user_account: dict
+        self, user_client: E2ETestClient
     ):
         """Test listing devices as regular user."""
-        token = create_token(user_account)
-        response = client.get(
-            "/api/v1/devices",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = user_client.get("/api/v1/devices")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
@@ -92,14 +55,10 @@ class TestDeviceList:
         assert response.status_code == 401
 
     def test_list_devices_pagination(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test listing devices with pagination parameters."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/devices?offset=0&limit=10",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/devices?offset=0&limit=10")
         assert response.status_code == 200
         data = response.json()
         assert data["limit"] == 10
@@ -110,11 +69,10 @@ class TestDeviceRetrieve:
     """Test GET /devices/{id} endpoint."""
 
     def test_retrieve_device_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test retrieving a device as master admin."""
-        token = create_token(master_admin_account)
-        
+
         # First create a device
         device_data = {
             "name": "Test Device",
@@ -124,52 +82,38 @@ class TestDeviceRetrieve:
             "ip": "192.168.1.100",
             "mac": "00:11:22:33:44:55"
         }
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=device_data)
         assert create_response.status_code == 201
         device_id = create_response.json()["id"]
-        
+
         # Then retrieve it
-        response = client.get(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get(f"/api/v1/devices/{device_id}")
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Test Device"
         assert data["is_active"] is True
 
     def test_retrieve_device_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test retrieving a non-existent device."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            f"/api/v1/devices/{uuid4()}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get(f"/api/v1/devices/{uuid4()}")
         assert response.status_code == 404
 
     def test_retrieve_device_invalid_uuid(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test retrieving device with invalid UUID."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/devices/not-a-uuid",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/devices/not-a-uuid")
         assert response.status_code == 422
 
     def test_retrieve_device_as_user(
-        self, client: TestClient, user_account: dict, master_admin_account: dict
+        self, user_client: E2ETestClient, master_admin_client: E2ETestClient
     ):
         """Test retrieving device as regular user."""
         # Create device as admin
-        admin_token = create_token(master_admin_account)
         device_data = {
             "name": "User Device",
             "brand": "TestBrand",
@@ -178,19 +122,13 @@ class TestDeviceRetrieve:
             "ip": "192.168.1.101",
             "mac": "00:11:22:33:44:66"
         }
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=device_data)
         device_id = create_response.json()["id"]
-        
+
         # Retrieve as user
-        user_token = create_token(user_account)
-        response = client.get(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
+        response = user_client.get(f"/api/v1/devices/{device_id}")
         assert response.status_code == 200
 
 
@@ -198,10 +136,9 @@ class TestDeviceCreate:
     """Test POST /devices endpoint."""
 
     def test_create_device_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating a new device as master admin."""
-        token = create_token(master_admin_account)
         device_data = {
             "name": "New Device",
             "brand": "BrandX",
@@ -211,21 +148,16 @@ class TestDeviceCreate:
             "mac": "AA:BB:CC:DD:EE:FF"
         }
 
-        response = client.post(
-            "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/devices", json=device_data)
         assert response.status_code == 201
         data = response.json()
         assert data["name"] == "New Device"
         assert data["is_active"] is True
 
     def test_create_device_as_admin(
-        self, client: TestClient, regular_admin_account: dict
+        self, regular_admin_client: E2ETestClient
     ):
         """Test creating device as regular admin."""
-        token = create_token(regular_admin_account)
         device_data = {
             "name": "Admin Device",
             "brand": "BrandX",
@@ -235,18 +167,13 @@ class TestDeviceCreate:
             "mac": "11:22:33:44:55:66"
         }
 
-        response = client.post(
-            "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = regular_admin_client.post("/api/v1/devices", json=device_data)
         assert response.status_code == 201
 
     def test_create_device_as_manager(
-        self, client: TestClient, manager_account: dict
+        self, manager_client: E2ETestClient
     ):
         """Test creating device as manager."""
-        token = create_token(manager_account)
         device_data = {
             "name": "Manager Device",
             "brand": "BrandX",
@@ -256,18 +183,13 @@ class TestDeviceCreate:
             "mac": "22:33:44:55:66:77"
         }
 
-        response = client.post(
-            "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = manager_client.post("/api/v1/devices", json=device_data)
         assert response.status_code == 201
 
     def test_create_device_as_user_forbidden(
-        self, client: TestClient, user_account: dict
+        self, user_client: E2ETestClient
     ):
         """Test creating device as user (should be forbidden)."""
-        token = create_token(user_account)
         device_data = {
             "name": "User Device",
             "brand": "BrandX",
@@ -277,18 +199,13 @@ class TestDeviceCreate:
             "mac": "33:44:55:66:77:88"
         }
 
-        response = client.post(
-            "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = user_client.post("/api/v1/devices", json=device_data)
         assert response.status_code == 403
 
     def test_create_device_missing_required_field(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating device with missing required field."""
-        token = create_token(master_admin_account)
         device_data = {
             "brand": "BrandX",
             "model": "ModelY",
@@ -297,18 +214,13 @@ class TestDeviceCreate:
             "mac": "44:55:66:77:88:99"
         }
 
-        response = client.post(
-            "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.post("/api/v1/devices", json=device_data)
         assert response.status_code == 422
 
     def test_create_device_duplicate_serial_number(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating device with duplicate serial number."""
-        token = create_token(master_admin_account)
         device_data = {
             "name": "Device 1",
             "brand": "BrandX",
@@ -319,28 +231,19 @@ class TestDeviceCreate:
         }
 
         # Create first device
-        response1 = client.post(
-            "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response1 = master_admin_client.post("/api/v1/devices", json=device_data)
         assert response1.status_code == 201
 
         # Try to create duplicate
         device_data["name"] = "Device 2"
         device_data["mac"] = "66:77:88:99:AA:BB"
-        response2 = client.post(
-            "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response2 = master_admin_client.post("/api/v1/devices", json=device_data)
         assert response2.status_code == 500
 
     def test_create_device_duplicate_mac(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test creating device with duplicate MAC address."""
-        token = create_token(master_admin_account)
         device_data = {
             "name": "Device 3",
             "brand": "BrandX",
@@ -351,21 +254,13 @@ class TestDeviceCreate:
         }
 
         # Create first device
-        response1 = client.post(
-            "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response1 = master_admin_client.post("/api/v1/devices", json=device_data)
         assert response1.status_code == 201
 
         # Try to create duplicate
         device_data["name"] = "Device 4"
         device_data["serial_number"] = "SN_UNIQUE2"
-        response2 = client.post(
-            "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response2 = master_admin_client.post("/api/v1/devices", json=device_data)
         assert response2.status_code == 500
 
 
@@ -373,10 +268,9 @@ class TestDeviceUpdate:
     """Test PATCH /devices/{id} endpoint."""
 
     def test_update_device_partial_as_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test updating device with partial fields."""
-        token = create_token(master_admin_account)
 
         # Create device
         device_data = {
@@ -387,34 +281,26 @@ class TestDeviceUpdate:
             "ip": "192.168.1.109",
             "mac": "77:88:99:AA:BB:CC"
         }
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=device_data)
         device_id = create_response.json()["id"]
 
         # Update partial
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/devices/{device_id}",
-            json={"name": "Updated Device"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"name": "Updated Device"})
         assert response.status_code == 200
 
         # Verify
-        get_response = client.get(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        get_response = master_admin_client.get(f"/api/v1/devices/{device_id}")
         assert get_response.json()["name"] == "Updated Device"
 
     def test_update_device_full_as_manager(
-        self, client: TestClient, manager_account: dict, master_admin_account: dict
+        self, master_admin_client: E2ETestClient, manager_client: E2ETestClient
     ):
         """Test updating multiple device fields as manager."""
         # Create device as admin
-        admin_token = create_token(master_admin_account)
         device_data = {
             "name": "Manager Update Device",
             "brand": "BrandX",
@@ -423,40 +309,31 @@ class TestDeviceUpdate:
             "ip": "192.168.1.110",
             "mac": "88:99:AA:BB:CC:DD"
         }
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=device_data)
         device_id = create_response.json()["id"]
 
         # Update as manager
-        manager_token = create_token(manager_account)
-        response = client.patch(
+        response = manager_client.patch(
             f"/api/v1/devices/{device_id}",
             json={
                 "name": "Manager Updated",
                 "brand": "NewBrand",
                 "ip": "192.168.1.200"
-            },
-            headers={"Authorization": f"Bearer {manager_token}"},
-        )
+            })
         assert response.status_code == 200
 
         # Verify
-        get_response = client.get(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {manager_token}"},
-        )
+        get_response = manager_client.get(f"/api/v1/devices/{device_id}")
         data = get_response.json()
         assert data["name"] == "Manager Updated"
         assert data["brand"] == "NewBrand"
 
     def test_update_device_deactivate(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test deactivating a device."""
-        token = create_token(master_admin_account)
 
         # Create device
         device_data = {
@@ -467,34 +344,26 @@ class TestDeviceUpdate:
             "ip": "192.168.1.111",
             "mac": "99:AA:BB:CC:DD:EE"
         }
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=device_data)
         device_id = create_response.json()["id"]
 
         # Deactivate
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/devices/{device_id}",
-            json={"is_active": False},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"is_active": False})
         assert response.status_code == 200
 
         # Verify
-        get_response = client.get(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        get_response = master_admin_client.get(f"/api/v1/devices/{device_id}")
         assert get_response.json()["is_active"] is False
 
     def test_update_device_as_user_forbidden(
-        self, client: TestClient, user_account: dict, master_admin_account: dict
+        self, master_admin_client: E2ETestClient, user_client: E2ETestClient
     ):
         """Test updating device as user (forbidden)."""
         # Create device as admin
-        admin_token = create_token(master_admin_account)
         device_data = {
             "name": "User Update Device",
             "brand": "BrandX",
@@ -503,32 +372,24 @@ class TestDeviceUpdate:
             "ip": "192.168.1.112",
             "mac": "AA:BB:CC:DD:EE:FF"
         }
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=device_data)
         device_id = create_response.json()["id"]
 
         # Try to update as user
-        user_token = create_token(user_account)
-        response = client.patch(
+        response = user_client.patch(
             f"/api/v1/devices/{device_id}",
-            json={"name": "Forbidden Update"},
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
+            json={"name": "Forbidden Update"})
         assert response.status_code == 403
 
     def test_update_device_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test updating non-existent device."""
-        token = create_token(master_admin_account)
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/devices/{uuid4()}",
-            json={"name": "Not Found"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"name": "Not Found"})
         assert response.status_code == 404
 
 
@@ -536,10 +397,9 @@ class TestDeviceDelete:
     """Test DELETE /devices/{id} endpoint."""
 
     def test_delete_device_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test deleting device as master admin."""
-        token = create_token(master_admin_account)
 
         # Create device
         device_data = {
@@ -550,32 +410,23 @@ class TestDeviceDelete:
             "ip": "192.168.1.113",
             "mac": "BB:CC:DD:EE:FF:00"
         }
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=device_data)
         device_id = create_response.json()["id"]
 
         # Delete
-        response = client.delete(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.delete(f"/api/v1/devices/{device_id}")
         assert response.status_code == 204
 
         # Verify deletion
-        get_response = client.get(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        get_response = master_admin_client.get(f"/api/v1/devices/{device_id}")
         assert get_response.status_code == 404
 
     def test_delete_device_as_admin(
-        self, client: TestClient, regular_admin_account: dict
+        self, regular_admin_client: E2ETestClient
     ):
         """Test deleting device as regular admin."""
-        token = create_token(regular_admin_account)
 
         # Create device
         device_data = {
@@ -586,26 +437,19 @@ class TestDeviceDelete:
             "ip": "192.168.1.114",
             "mac": "CC:DD:EE:FF:00:11"
         }
-        create_response = client.post(
+        create_response = regular_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=device_data)
         device_id = create_response.json()["id"]
 
         # Delete
-        response = client.delete(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = regular_admin_client.delete(f"/api/v1/devices/{device_id}")
         assert response.status_code == 204
 
     def test_delete_device_as_manager(
-        self, client: TestClient, manager_account: dict, master_admin_account: dict
+        self, master_admin_client: E2ETestClient, manager_client: E2ETestClient
     ):
-        """Test deleting device as manager (allowed per permission matrix)."""
-        # Create device as admin
-        admin_token = create_token(master_admin_account)
+        """Managers cannot delete devices (Polar policy: deny delete on Device for manager)."""
         device_data = {
             "name": "Manager Delete Device",
             "brand": "BrandX",
@@ -614,27 +458,19 @@ class TestDeviceDelete:
             "ip": "192.168.1.115",
             "mac": "DD:EE:FF:00:11:22"
         }
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=device_data)
         device_id = create_response.json()["id"]
 
-        # Delete as manager
-        manager_token = create_token(manager_account)
-        response = client.delete(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {manager_token}"},
-        )
-        assert response.status_code == 204
+        response = manager_client.delete(f"/api/v1/devices/{device_id}")
+        assert response.status_code == 403
 
     def test_delete_device_as_user_forbidden(
-        self, client: TestClient, user_account: dict, master_admin_account: dict
+        self, master_admin_client: E2ETestClient, user_client: E2ETestClient
     ):
         """Test deleting device as user (forbidden)."""
         # Create device as admin
-        admin_token = create_token(master_admin_account)
         device_data = {
             "name": "User Delete Device",
             "brand": "BrandX",
@@ -643,28 +479,18 @@ class TestDeviceDelete:
             "ip": "192.168.1.116",
             "mac": "EE:FF:00:11:22:33"
         }
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/devices",
-            json=device_data,
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=device_data)
         device_id = create_response.json()["id"]
 
         # Try to delete as user
-        user_token = create_token(user_account)
-        response = client.delete(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
+        response = user_client.delete(f"/api/v1/devices/{device_id}")
         assert response.status_code == 403
 
     def test_delete_device_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Test deleting non-existent device."""
-        token = create_token(master_admin_account)
-        response = client.delete(
-            f"/api/v1/devices/{uuid4()}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.delete(f"/api/v1/devices/{uuid4()}")
         assert response.status_code == 404

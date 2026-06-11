@@ -13,18 +13,13 @@ from app.shared.rate_limit import rate_limiter
 class RoleController(FullCrudApiController):
     prefix = "/roles"
     tags = ["Roles"]
+    model_class = Role
     service_dep = RoleServiceDep
     response_schema = RoleResponse
     create_schema = RoleCreate
     update_schema = RoleUpdate
 
     router_dependencies = [Depends(rate_limiter(max_requests=3, window_seconds=1.0, scope="roles"))]
-
-    list_dependencies = [require_read(Role)]
-    retrieve_dependencies = [require_read(Role)]
-    create_dependencies = [require_write(Role)]
-    update_dependencies = [require_write(Role)]
-    delete_dependencies = [require_delete(Role)]
 
     def _register_routes(self):
         super()._register_routes()

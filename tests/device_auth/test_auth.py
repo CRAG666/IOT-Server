@@ -43,8 +43,7 @@ def build_valid_puzzle(device_id, device_key_hex: str) -> dict:
     p2 = hmac.new(
         device_key + get_server_key(),
         r2 + timestamp,
-        hashlib.sha256,
-    ).digest()
+        hashlib.sha256).digest()
 
     plaintext = p2 + r2 + timestamp  # 32 + 32 + 8 = 72 bytes
     ciphertext, iv = encrypt_aes(plaintext, device_key)
@@ -67,8 +66,7 @@ def build_expired_puzzle(device_id, device_key_hex: str) -> dict:
     p2 = hmac.new(
         device_key + get_server_key(),
         r2 + timestamp,
-        hashlib.sha256,
-    ).digest()
+        hashlib.sha256).digest()
 
     plaintext = p2 + r2 + timestamp
     ciphertext, iv = encrypt_aes(plaintext, device_key)
@@ -91,8 +89,7 @@ def build_wrong_key_puzzle(device_id) -> dict:
     p2 = hmac.new(
         wrong_key + get_server_key(),
         r2 + timestamp,
-        hashlib.sha256,
-    ).digest()
+        hashlib.sha256).digest()
 
     plaintext = p2 + r2 + timestamp
     ciphertext, iv = encrypt_aes(plaintext, wrong_key)
@@ -139,8 +136,7 @@ def mock_session_service():
     service.create_session_with_tokens.return_value = MagicMock(
         access_token="test_access_token",
         refresh_token="test_refresh_token",
-        token_type="Bearer",
-    )
+        token_type="Bearer")
     return service
 
 
@@ -152,8 +148,7 @@ def device_with_key(db):
         device = Device(
             name="Sensor Test",
             encryption_key=DEVICE_KEY_HEX,
-            is_active=True,
-        )
+            is_active=True)
         session.add(device)
         session.commit()
         session.refresh(device)
@@ -168,8 +163,7 @@ def inactive_device(db):
         device = Device(
             name="Sensor Inactivo",
             encryption_key=DEVICE_KEY_HEX,
-            is_active=False,
-        )
+            is_active=False)
         session.add(device)
         session.commit()
         session.refresh(device)
@@ -184,8 +178,7 @@ def device_without_key(db):
         device = Device(
             name="Sensor Sin Key",
             encryption_key=None,
-            is_active=True,
-        )
+            is_active=True)
         session.add(device)
         session.commit()
         session.refresh(device)

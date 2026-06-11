@@ -1,0 +1,95 @@
+# =============================================================================
+# IoTmx API — Administrators
+# Required role: master_admin (administer) for create/update/delete
+#                administrator (read) for list/get
+#
+# All responses are AES-256-GCM encrypted. GET requests only need
+# X-Session-ID; the VS Code REST Client blocks below send the correct
+# headers — the response will appear as {"payload":"...","iv":"..."}.
+# Use e2e.py to get human-readable output.
+#
+# Login first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url = http://localhost:8000
+@session_id = REPLACE_WITH_SESSION_ID
+@admin_id   = REPLACE_WITH_ADMIN_UUID
+
+
+### List all administrators (paginated)
+# e2e.py: uv run python http/e2e.py get "/api/v1/administrators?offset=0&limit=20"
+GET {{base_url}}/api/v1/administrators?offset=0&limit=20
+X-Session-ID: {{session_id}}
+
+###
+
+### Get administrator by ID
+# e2e.py: uv run python http/e2e.py get /api/v1/administrators/{{admin_id}}
+GET {{base_url}}/api/v1/administrators/{{admin_id}}
+X-Session-ID: {{session_id}}
+
+###
+
+### Create administrator  [master_admin only]
+# e2e.py: uv run python http/e2e.py post /api/v1/administrators \
+#   '{"first_name":"Ana","last_name":"Lopez","second_last_name":"Torres","phone":"+523312345678","address":"123 Main St","city":"Mexico City","state":"Mexico","postal_code":"06500","birth_date":"1990-06-15","email":"ana@example.com","password":"AdminPass123!","curp":"LOTA900615MDFPRS07","rfc":"LOTA900615AB1"}'
+#
+# Plaintext body shape:
+# {
+#   "first_name":       "Ana",
+#   "last_name":        "Lopez",
+#   "second_last_name": "Torres",
+#   "phone":            "+523312345678",   // 10-15 digits, optional +
+#   "address":          "123 Main St",
+#   "city":             "Mexico City",
+#   "state":            "Mexico",
+#   "postal_code":      "06500",           // 5 digits 01000-99999
+#   "birth_date":       "1990-06-15",      // must be 18+ years old
+#   "email":            "ana@example.com",
+#   "password":         "AdminPass123!",   // 8-128 chars, upper+lower+digit+special
+#   "curp":             "LOTA900615MDFPRS07",
+#   "rfc":              "LOTA900615AB1"
+# }
+POST {{base_url}}/api/v1/administrators
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Update administrator  [master_admin only]
+# All fields optional. Omit fields you do not want to change.
+# e2e.py: uv run python http/e2e.py patch /api/v1/administrators/{{admin_id}} \
+#   '{"phone":"+523300000001","is_active":true}'
+#
+# Plaintext body shape (all optional):
+# {
+#   "first_name":       "...",
+#   "last_name":        "...",
+#   "second_last_name": "...",
+#   "phone":            "...",
+#   "address":          "...",
+#   "city":             "...",
+#   "state":            "...",
+#   "postal_code":      "...",
+#   "birth_date":       "YYYY-MM-DD",
+#   "email":            "...",
+#   "password":         "...",
+#   "curp":             "...",
+#   "rfc":              "...",
+#   "is_active":        true
+# }
+PATCH {{base_url}}/api/v1/administrators/{{admin_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Delete administrator  [master_admin only]
+# e2e.py: uv run python http/e2e.py delete /api/v1/administrators/{{admin_id}}
+DELETE {{base_url}}/api/v1/administrators/{{admin_id}}
+X-Session-ID: {{session_id}}

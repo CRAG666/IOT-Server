@@ -1,0 +1,62 @@
+# =============================================================================
+# IoTmx API — Telemetry (IoT data ingest & query)
+# Required role: user/administrator/manager (write ingest), read for query
+#
+# Note: telemetry is stored in MongoDB; the device must be active and
+# assigned to the specified service.
+#
+# Login first:
+#   uv run python http/e2e.py login master_admin@test.com MasterPassword123!
+# =============================================================================
+
+@base_url   = http://localhost:8000
+@session_id = REPLACE_WITH_SESSION_ID
+@device_id  = REPLACE_WITH_DEVICE_UUID
+@service_id = REPLACE_WITH_SERVICE_UUID
+
+
+### Ingest telemetry for a device
+# e2e.py: uv run python http/e2e.py post /api/v1/telemetry/{{device_id}} \
+#   '{"service_id":"SERVICE_UUID","payload":{"temperature":23.5,"humidity":62.1,"pressure":1013.25}}'
+#
+# Plaintext body shape:
+# {
+#   "service_id": "<UUID>",     // required — must be a service the device belongs to
+#   "payload":    { ... }       // required — arbitrary JSON object (sensor readings)
+# }
+#
+# Example payload fields (application-defined):
+# {
+#   "temperature": 23.5,
+#   "humidity":    62.1,
+#   "pressure":    1013.25,
+#   "battery_pct": 87,
+#   "location":    { "lat": 19.432, "lng": -99.133 }
+# }
+POST {{base_url}}/api/v1/telemetry/{{device_id}}
+Content-Type: application/json
+X-Session-ID: {{session_id}}
+
+{ "payload": "<encrypted — use e2e.py>", "iv": "<nonce>" }
+
+###
+
+### Query historical telemetry for a device
+# e2e.py: uv run python http/e2e.py get \
+#   "/api/v1/telemetry/{{device_id}}?since=2026-01-01T00:00:00&until=2026-12-31T23:59:59&limit=100&offset=0"
+#
+# Query parameters (all optional):
+#   since   ISO-8601 datetime — filter records after this timestamp
+#   until   ISO-8601 datetime — filter records before this timestamp
+#   limit   integer 1–1000, default 100
+#   offset  integer, default 0
+GET {{base_url}}/api/v1/telemetry/{{device_id}}?limit=50&offset=0
+X-Session-ID: {{session_id}}
+
+###
+
+### Query telemetry with time range
+# e2e.py: uv run python http/e2e.py get \
+#   "/api/v1/telemetry/{{device_id}}?since=2026-06-01T00:00:00&limit=100"
+GET {{base_url}}/api/v1/telemetry/{{device_id}}?since=2026-06-01T00:00:00&limit=100
+X-Session-ID: {{session_id}}

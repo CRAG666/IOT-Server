@@ -1,3 +1,4 @@
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Optional
 from uuid import UUID
@@ -5,11 +6,10 @@ from app.shared.base_domain.model import BaseTable
 from datetime import datetime, timezone
 import secrets
 
+from sqlalchemy import Column, Numeric
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
-
-from app.shared.base_domain.model import BaseTable
 from app.database.format import UserPlainAttribute
-from app.shared.auth.security import get_password_hash
+from app.shared.crypto import generate_salt, hash_password
 
 
 class NonCriticalPersonalData(BaseTable, table=True):
@@ -41,6 +41,8 @@ class SensitiveData(BaseTable, table=True):
     )
     email: str = Field(unique=True)
     password_hash: str
+    # SEC-001: per-user random salt — prevents rainbow-table attacks on password_hash
+    password_salt: str = Field(default="")
     curp: str | None = Field(default=None, unique=True)
     rfc: str | None = Field(default=None, unique=True)
 
@@ -64,7 +66,9 @@ class SensitiveData(BaseTable, table=True):
     def __init__(self, **data: Any):
         password = data.pop("password", None)
         if password is not None:
-            data["password_hash"] = get_password_hash(password)
+            salt = generate_salt()
+            data["password_salt"] = salt
+            data["password_hash"] = hash_password(password, salt)
         super().__init__(**data)
 
     def sqlmodel_update(
@@ -84,27 +88,51 @@ class SensitiveData(BaseTable, table=True):
 
     @password.setter
     def password(self, plain_password: str) -> None:
-        if plain_password.startswith("$2"):
-            raise ValueError("password must be provided in plain text")
-        self.password_hash = get_password_hash(plain_password)
+        salt = generate_salt()
+        self.password_salt = salt
+        self.password_hash = hash_password(plain_password, salt)
 
 
 class PersonalData(BaseTable, UserPlainAttribute):
-    sensitive_data_id: UUID = Field(foreign_key="sensitive_data.id", unique=True)
+    sensitive_data_id: UUID = Field(foreign_key="sensitive_data.id", unique=True, index=True)
 
     # Estado XMSS para humanos: Administrator, Manager y User.
     xmss_public_root: str | None = None
-    xmss_current_index: int = Field(default=0)
-    xmss_tree_height: int = Field(default=4)
+    xmss_current_index: int = Field(default=0, ge=0)
+    # Valid XMSS tree heights: 2, 4, 8, 10, 16, 20 (must be even positive int)
+    xmss_tree_height: int = Field(default=4, ge=2, le=20)
+
+
+class Tenant(BaseTable, table=True):
+    """A customer organisation — top-level multi-tenancy boundary."""
+
+    __tablename__ = "tenant"  # pyright: ignore[reportAssignmentType]
+
+    name: str = Field(unique=True, max_length=255)
+    is_active: bool = Field(default=True)
+
+    administrators: list["Administrator"] = Relationship(
+        back_populates="tenant",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+    services: list["Service"] = Relationship(
+        back_populates="tenant",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
 
 
 class Administrator(PersonalData, table=True):
     __tablename__ = "administrator"  # pyright: ignore[reportAssignmentType]
 
     is_master: bool = Field(default=False)
+    tenant_id: UUID | None = Field(default=None, foreign_key="tenant.id", index=True)
 
     sensitive_data: SensitiveData = Relationship(
         back_populates="administrator",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+    tenant: Optional["Tenant"] = Relationship(
+        back_populates="administrators",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
     manager_services: list["Service"] = Relationship(
@@ -152,8 +180,13 @@ class Service(BaseTable, table=True):
     name: str = Field(unique=True)
     description: str | None = None
     administrator_id: UUID = Field(foreign_key="administrator.id")
+    tenant_id: UUID | None = Field(default=None, foreign_key="tenant.id", index=True)
     is_active: bool = Field(default=True)
 
+    tenant: Optional["Tenant"] = Relationship(
+        back_populates="services",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
     registered_by: Administrator = Relationship(
         back_populates="manager_services",
         sa_relationship_kwargs={"lazy": "selectin"},
@@ -310,8 +343,16 @@ class Role(BaseTable, table=True):
         back_populates="role",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
+    permission: Optional["RolePermission"] = Relationship(
+        back_populates="role",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
 
 
+class RolePermission(BaseTable, table=True):
+    """Capability flags for a Role — 1:1 with Role."""
+
+    __tablename__ = "role_permission"  # pyright: ignore[reportAssignmentType]
 
     role_id: UUID = Field(foreign_key="role.id", unique=True)
     can_read: bool = Field(default=False)
@@ -346,9 +387,10 @@ class UserRole(BaseTable, table=True):
     )
 
 
-class TicketStatus(BaseTable, table=True):
+class TicketStatus(SQLModel, table=True):
     __tablename__ = "ticket_status"  # pyright: ignore[reportAssignmentType]
 
+    id: int | None = Field(default=None, primary_key=True)
     name: str = Field(unique=True)
     description: str | None = None
 
@@ -420,7 +462,10 @@ class EcosystemTicket(BaseTable, table=True):
 class SubscriptionType(BaseTable, table=True):
     __tablename__ = "subscription_type"  # pyright: ignore[reportAssignmentType]
     type: str = Field(unique=True)
-    cost: float
+    cost: Decimal = Field(
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(precision=10, scale=2)),
+    )
 
     payments: list["Payment"] = Relationship(
         back_populates="subscription_type",
@@ -476,7 +521,10 @@ class PaymentHistory(BaseTable, table=True):
 
     payment_id: UUID = Field(foreign_key="payment.id")
     deposit_id: str
-    amount: float
+    amount: Decimal = Field(
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(precision=12, scale=2)),
+    )
     period_start: datetime
     period_end: datetime
 
@@ -484,3 +532,17 @@ class PaymentHistory(BaseTable, table=True):
         back_populates="history",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
+
+
+class AuditLog(BaseTable, table=True):
+    """Immutable record of every mutating action taken by an authenticated account."""
+
+    __tablename__ = "audit_log"  # pyright: ignore[reportAssignmentType]
+
+    account_id: UUID = Field(index=True)
+    account_type: str
+    action: str
+    resource_type: str
+    resource_id: UUID | None = Field(default=None, index=True)
+    details: str | None = None
+    ip_address: str | None = None

@@ -1,0 +1,39 @@
+### List webhooks (owned by authenticated account)
+# @expect 200
+GET /api/v1/webhooks/
+
+### Register webhook — device.telemetry + payment.completed events
+# @expect 201
+# @capture new_webhook_id $.id
+POST /api/v1/webhooks/
+
+{
+  "url": "https://e2e.iotmx.test/hooks/receive",
+  "event_types": ["device.telemetry", "payment.completed"]
+}
+
+### Register webhook for all events
+# @expect 201
+# @capture new_webhook_id2 $.id
+POST /api/v1/webhooks/
+
+{
+  "url": "https://e2e.iotmx.test/hooks/all",
+  "event_types": ["device.telemetry", "service.state_changed", "ticket.created", "payment.completed"]
+}
+
+### List webhooks — should include both new webhooks
+# @expect 200
+GET /api/v1/webhooks/
+
+### Delete first webhook
+# @expect 204
+DELETE /api/v1/webhooks/{{new_webhook_id}}
+
+### Delete second webhook
+# @expect 204
+DELETE /api/v1/webhooks/{{new_webhook_id2}}
+
+### Delete non-existent webhook — 204 (soft-delete is idempotent, no 404)
+# @expect 204
+DELETE /api/v1/webhooks/00000000-0000-0000-0000-000000000012

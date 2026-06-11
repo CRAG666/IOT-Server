@@ -1,0 +1,44 @@
+### Ingest telemetry reading for device
+# Device must be assigned to the service (done in 08_services.http).
+# @skip requires MongoDB (not available in SQLite dev-server mode)
+POST /api/v1/telemetry/{{new_device_id}}
+
+{
+  "service_id": "{{new_service_id}}",
+  "payload": {
+    "temperature": 23.5,
+    "humidity": 61.2,
+    "pressure": 1013.25,
+    "battery_pct": 87
+  }
+}
+
+### Ingest second telemetry reading
+# @skip requires MongoDB
+POST /api/v1/telemetry/{{new_device_id}}
+
+{
+  "service_id": "{{new_service_id}}",
+  "payload": {
+    "temperature": 24.1,
+    "humidity": 60.8,
+    "pressure": 1012.80,
+    "battery_pct": 86
+  }
+}
+
+### Query telemetry for device — returns paginated list
+# @skip requires MongoDB
+GET /api/v1/telemetry/{{new_device_id}}?limit=100&offset=0
+
+### Query with limit=1
+# @skip requires MongoDB
+GET /api/v1/telemetry/{{new_device_id}}?limit=1&offset=0
+
+### Query with time range (since far past — should return all)
+# @skip requires MongoDB
+GET /api/v1/telemetry/{{new_device_id}}?since=2000-01-01T00:00:00&limit=100
+
+### Query for unknown device — MongoDB returns 200 with empty result (no DB-level 404)
+# @skip requires MongoDB
+GET /api/v1/telemetry/00000000-0000-0000-0000-000000000011?limit=10

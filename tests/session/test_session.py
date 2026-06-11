@@ -117,8 +117,7 @@ class TestModels:
             ip_address="127.0.0.1",
             user_agent="Mozilla/5.0",
             created_at=now,
-            last_activity=now,
-        )
+            last_activity=now)
         
         assert data.user_id == "user-123"
         assert data.token_id == "token-456"
@@ -132,8 +131,7 @@ class TestModels:
         tokens = SessionTokens(
             access_token="eyJ...",
             refresh_token="abc123",
-            token_type="bearer",
-        )
+            token_type="bearer")
         
         assert tokens.access_token == "eyJ..."
         assert tokens.refresh_token == "abc123"
@@ -145,8 +143,7 @@ class TestModels:
             email="test@example.com",
             account_type="administrator",
             is_master=True,
-            token_id="token-456",
-        )
+            token_id="token-456")
         
         assert user.user_id == "user-123"
         assert user.email == "test@example.com"

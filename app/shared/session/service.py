@@ -6,7 +6,7 @@ import logging
 import secrets
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 from fastapi import Depends
@@ -49,12 +49,12 @@ METADATA_FORBIDDEN_KEYS: frozenset[str] = frozenset({
 class SessionService:
     def __init__(
         self,
-        valkey_url: Optional[str] = None,
-        encryption_key: Optional[str] = None,
+        valkey_url: str | None = None,
+        encryption_key: str | None = None,
     ):
         self._repository = SessionRepository(valkey_url or settings.VALKEY_URL)
         self._encryption_key = encryption_key or settings.ENCRYPTION_KEY
-        self._jwe_handler: Optional[JWEHandler] = None
+        self._jwe_handler: JWEHandler | None = None
 
     def _get_jwe_handler(self) -> JWEHandler:
         """Lazy initialization of JWE handler (only for legacy flow)."""
@@ -74,7 +74,7 @@ class SessionService:
         entity_id: UUID,
         key_session: str,
         ip_address: str,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> EntitySessionResponse:
         entity_id_str = self._validate_entity_id(entity_id)
         self._validate_key_session(key_session)
@@ -201,7 +201,7 @@ class SessionService:
 
     @staticmethod
     def _validate_metadata(
-        metadata: Optional[dict[str, Any]],
+        metadata: dict[str, Any] | None,
     ) -> dict[str, Any]:
         if metadata is None:
             return {}
@@ -302,7 +302,7 @@ class SessionService:
     async def reset_rate_limit(self, ip_address: str) -> None:
         await self._repository.reset_rate_limit(ip_address)
 
-    async def get_session(self, user_id: str) -> Optional[SessionData]:
+    async def get_session(self, user_id: str) -> SessionData | None:
         return await self._repository.get_session(user_id)
 
 

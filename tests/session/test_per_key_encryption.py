@@ -7,17 +7,14 @@ Tests the three main processes:
 3. process_encrypted_request - verify HMAC and return key_session
 
 Plus: invalidate_entity_session (logout) and validation helpers.
-
-IMPORTANT: These tests require Docker services running:
-    docker-compose up -d valkey
 """
 
 import base64
 import secrets
 from uuid import UUID, uuid4
 
+import fakeredis
 import pytest
-import valkey.asyncio as valkey
 
 from app.shared.session.exceptions import (
     InvalidEntityIdException,
@@ -26,45 +23,37 @@ from app.shared.session.exceptions import (
     InvalidMetadataException,
     InvalidTagException,
     SessionAlreadyExistsException,
-    SessionNotFoundException,
-)
+    SessionNotFoundException)
 from app.shared.session.repository import SessionRepository
 from app.shared.session.security import SessionHMAC
 from app.shared.session.service import SessionService
 
 
-VALKEY_TEST_URL = "valkey://localhost:6379/1"
 TEST_ENCRYPTION_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 
 
 @pytest.fixture
 async def valkey_client():
-    client = await valkey.from_url(
-        VALKEY_TEST_URL,
-        encoding="utf-8",
-        decode_responses=True,
-    )
+    client = fakeredis.FakeAsyncValkey(decode_responses=True)
     yield client
-    await client.flushdb()
+    await client.flushall()
     await client.aclose()
 
 
 @pytest.fixture
 async def repository(valkey_client):
-    repo = SessionRepository(VALKEY_TEST_URL)
-    await repo.connect()
+    repo = SessionRepository("valkey://localhost:6379/1")
+    repo.client = valkey_client
     yield repo
-    await repo.close()
 
 
 @pytest.fixture
 async def service(valkey_client):
-    svc = SessionService(
-        valkey_url=VALKEY_TEST_URL,
-        encryption_key=TEST_ENCRYPTION_KEY,
-    )
+    svc = SessionService(encryption_key=TEST_ENCRYPTION_KEY)
+    repo = SessionRepository("valkey://localhost:6379/1")
+    repo.client = valkey_client
+    svc._repository = repo
     yield svc
-    await svc.close()
 
 
 @pytest.fixture
@@ -92,8 +81,7 @@ class TestCheckActiveSession:
         await service.create_entity_session(
             entity_id=entity_id,
             key_session=key_session,
-            ip_address="192.168.1.1",
-        )
+            ip_address="192.168.1.1")
         assert await service.check_active_session(entity_id) is True
 
     @pytest.mark.asyncio
@@ -102,8 +90,7 @@ class TestCheckActiveSession:
         await service.create_entity_session(
             entity_id=a,
             key_session=key_session,
-            ip_address="192.168.1.1",
-        )
+            ip_address="192.168.1.1")
         assert await service.check_active_session(a) is True
         assert await service.check_active_session(b) is False
 
@@ -124,8 +111,7 @@ class TestCreateEntitySession:
         result = await service.create_entity_session(
             entity_id=entity_id,
             key_session=key_session,
-            ip_address="192.168.1.1",
-        )
+            ip_address="192.168.1.1")
         assert result.session_id
         assert len(result.session_id) >= 32
         assert not hasattr(result, "encrypted_token")
@@ -135,8 +121,7 @@ class TestCreateEntitySession:
         await service.create_entity_session(
             entity_id=entity_id,
             key_session=key_session,
-            ip_address="10.0.0.1",
-        )
+            ip_address="10.0.0.1")
         stored = await repository.get_entity_session(str(entity_id))
         assert stored is not None
         assert stored.entity_id == str(entity_id)
@@ -151,8 +136,7 @@ class TestCreateEntitySession:
             entity_id=entity_id,
             key_session=key_session,
             ip_address="10.0.0.1",
-            metadata=metadata,
-        )
+            metadata=metadata)
         stored = await repository.get_entity_session(str(entity_id))
         assert stored.metadata == metadata
 
@@ -161,8 +145,7 @@ class TestCreateEntitySession:
         result = await service.create_entity_session(
             entity_id=entity_id,
             key_session=key_session,
-            ip_address="10.0.0.1",
-        )
+            ip_address="10.0.0.1")
         found = await repository.get_entity_session_by_id(result.session_id)
         assert found is not None
         assert found.entity_id == str(entity_id)
@@ -220,14 +203,13 @@ class TestCreateEntitySession:
                 entity_id,
                 key_session,
                 "1.1.1.1",
-                metadata={"password": "secret"},
-            )
+                metadata={"password": "secret"})
 
     @pytest.mark.asyncio
     async def test_metadata_too_many_keys_raises(
         self, service, entity_id, key_session
     ):
-        too_many = {f"k{i}": i for i in range(25)}
+        too_many = {f"k{i}": i for i in range(51)}
         with pytest.raises(InvalidMetadataException):
             await service.create_entity_session(
                 entity_id, key_session, "1.1.1.1", metadata=too_many
@@ -259,8 +241,7 @@ class TestProcessEncryptedRequest:
         returned_key = await service.process_encrypted_request(
             session_id=result.session_id,
             tag=tag,
-            payload=payload,
-        )
+            payload=payload)
         assert returned_key == key_session
 
     @pytest.mark.asyncio
@@ -272,8 +253,7 @@ class TestProcessEncryptedRequest:
             await service.process_encrypted_request(
                 session_id=result.session_id,
                 tag="invalid_tag",
-                payload="whatever",
-            )
+                payload="whatever")
 
     @pytest.mark.asyncio
     async def test_nonexistent_session_raises(self, service, key_session):
@@ -282,8 +262,7 @@ class TestProcessEncryptedRequest:
             await service.process_encrypted_request(
                 session_id="fake_sid",
                 tag=tag,
-                payload="payload",
-            )
+                payload="payload")
 
     @pytest.mark.asyncio
     async def test_modified_payload_rejected(self, service, entity_id, key_session):
@@ -295,8 +274,7 @@ class TestProcessEncryptedRequest:
             await service.process_encrypted_request(
                 session_id=result.session_id,
                 tag=tag,
-                payload="modified",
-            )
+                payload="modified")
 
     @pytest.mark.asyncio
     async def test_tag_cross_session_rejected(self, service, key_session):
@@ -310,8 +288,7 @@ class TestProcessEncryptedRequest:
             await service.process_encrypted_request(
                 session_id=r2.session_id,
                 tag=tag_for_r1,
-                payload="payload",
-            )
+                payload="payload")
 
     @pytest.mark.asyncio
     async def test_empty_params_raise(self, service):

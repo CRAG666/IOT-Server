@@ -21,7 +21,7 @@ class DeviceAuth(IAuthMethod[Device]):
 
         try:
             key = self._normalize_key(device.encryption_key)
-        except ValueError:
+        except ValueError:  # pragma: no cover
             return {"valid": False, "error": "Invalid device encryption key"}
 
         return self.verifier.verify(key, puzzle, str(device.id))

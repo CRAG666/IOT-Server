@@ -84,8 +84,7 @@ def mock_session_service():
     service.get_session.return_value = None
     service.create_entity_session.return_value = MagicMock(
         session_id="test-session-id",
-        encrypted_token="test-encrypted-token",
-    )
+        encrypted_token="test-encrypted-token")
     return service
 
 

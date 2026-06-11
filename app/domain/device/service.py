@@ -20,6 +20,7 @@ class IDeviceService(IBaseService[Device, DeviceCreate, DeviceUpdate]):
 class DeviceService(BaseService[Device, DeviceCreate, DeviceUpdate], IDeviceService):
     entity_name = "Device"
     repository_class = DeviceRepository
+    audit_excluded_fields = BaseService.audit_excluded_fields | frozenset({"encryption_key"})
 
     @override
     def get_all(self, offset: int = 0, limit: int = 20) -> PageResponse[Device]:

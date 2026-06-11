@@ -44,8 +44,7 @@ def build_valid_puzzle(application_id, api_key_hex: str) -> dict:
     p2 = hmac.new(
         api_key + server_key,
         r2 + timestamp,
-        hashlib.sha256,
-    ).digest()
+        hashlib.sha256).digest()
 
     plaintext = p2 + r2 + timestamp
     ciphertext, iv = encrypt_aes(plaintext, api_key)
@@ -69,8 +68,7 @@ def build_expired_puzzle(application_id, api_key_hex: str) -> dict:
     p2 = hmac.new(
         api_key + server_key,
         r2 + timestamp,
-        hashlib.sha256,
-    ).digest()
+        hashlib.sha256).digest()
 
     plaintext = p2 + r2 + timestamp
     ciphertext, iv = encrypt_aes(plaintext, api_key)
@@ -94,8 +92,7 @@ def build_wrong_key_puzzle(application_id) -> dict:
     p2 = hmac.new(
         wrong_key + server_key,
         r2 + timestamp,
-        hashlib.sha256,
-    ).digest()
+        hashlib.sha256).digest()
 
     plaintext = p2 + r2 + timestamp
     ciphertext, iv = encrypt_aes(plaintext, wrong_key)
@@ -142,8 +139,7 @@ def mock_session_service():
     service.create_session_with_tokens.return_value = MagicMock(
         access_token="test_access_token",
         refresh_token="test_refresh_token",
-        token_type="Bearer",
-    )
+        token_type="Bearer")
     return service
 
 
@@ -166,26 +162,23 @@ def admin_for_app(db):
             state="Test",
             postal_code="06500",
             birth_date=datetime(1990, 1, 1),
-            is_active=True,
-        )
+            is_active=True)
         session.add(non_critical)
         session.flush()
 
         sensitive = SensitiveData(
             non_critical_data_id=non_critical.id,
             email="app_admin@test.com",
-            password_hash=get_password_hash("TestPass123!"),
+            password="TestPass123!",
             curp="APAD111111HDFRRL09",
-            rfc="APAD111111AB0",
-        )
+            rfc="APAD111111AB0")
         session.add(sensitive)
         session.flush()
 
         admin = Administrator(
             sensitive_data_id=sensitive.id,
             is_master=True,
-            is_active=True,
-        )
+            is_active=True)
         session.add(admin)
         session.commit()
         session.refresh(admin)
@@ -204,8 +197,7 @@ def app_with_key(db, admin_for_app):
             version="1.0.0",
             url="https://testapp.com",
             description="Test application",
-            is_active=True,
-        )
+            is_active=True)
         session.add(application)
         session.commit()
         session.refresh(application)
@@ -224,8 +216,7 @@ def inactive_app(db, admin_for_app):
             version="1.0.0",
             url="https://inactive.com",
             description="Inactive application",
-            is_active=False,
-        )
+            is_active=False)
         session.add(application)
         session.commit()
         session.refresh(application)

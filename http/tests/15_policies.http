@@ -1,0 +1,81 @@
+### List all active Casbin policy rules (master_admin only)
+# Returns a plain JSON array — no pagination wrapper
+# @expect 200
+GET /api/v1/policies/
+
+### Get rules for administrator role
+# @expect 200
+# @assert $.role administrator
+GET /api/v1/policies/administrator
+
+### Get rules for manager role
+# @expect 200
+# @assert $.role manager
+GET /api/v1/policies/manager
+
+### Get rules for unknown role — 404
+# @expect 404
+GET /api/v1/policies/no_such_role_xyz
+
+### Add new policy rule — support_agent read on Report
+# @expect 201
+# @assert $.role support_agent
+# @assert $.resource Report
+# @assert $.action read
+POST /api/v1/policies
+
+{"role": "support_agent", "resource": "Report", "action": "read"}
+
+### Add same rule again — idempotent, returns 201 (no error on duplicate)
+# @expect 201
+POST /api/v1/policies
+
+{"role": "support_agent", "resource": "Report", "action": "read"}
+
+### Add another rule — manager write on AuditLog
+# @expect 201
+# @assert $.role manager
+# @assert $.resource AuditLog
+# @assert $.action read
+POST /api/v1/policies
+
+{"role": "manager", "resource": "AuditLog", "action": "read"}
+
+### Verify new rule appears in manager policy list
+# @expect 200
+# @assert $.role manager
+GET /api/v1/policies/manager
+
+### Reject wildcard in role — 422
+# @expect 422
+POST /api/v1/policies
+
+{"role": "admin*", "resource": "Device", "action": "read"}
+
+### Reject wildcard in resource — 422
+# @expect 422
+POST /api/v1/policies
+
+{"role": "manager", "resource": "De*ice", "action": "read"}
+
+### Reject invalid action — 422
+# @expect 422
+POST /api/v1/policies
+
+{"role": "manager", "resource": "Device", "action": "superpower"}
+
+### Delete support_agent rule on Report
+# @expect 204
+DELETE /api/v1/policies/support_agent/Report/read
+
+### Delete manager rule on AuditLog
+# @expect 204
+DELETE /api/v1/policies/manager/AuditLog/read
+
+### Delete non-existent rule — 404
+# @expect 404
+DELETE /api/v1/policies/support_agent/Report/read
+
+### Cannot delete master_admin wildcard rule — 400
+# @expect 400
+DELETE /api/v1/policies/master_admin/*/*

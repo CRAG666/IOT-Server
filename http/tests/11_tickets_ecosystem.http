@@ -1,0 +1,54 @@
+### List ecosystem tickets
+# @expect 200
+GET /api/v1/tickets/ecosystem/
+
+### Create ecosystem ticket
+# Requires: manager_service_id — the ManagerService junction record UUID.
+#           This is captured as part of the service assignment in 08_services.http.
+#           But ManagerService.id was not captured there; this test uses
+#           a workaround: look up via GET /services/{id}/managers.
+#
+# NOTE: ManagerService has its own UUID PK, captured indirectly.
+#       The ecosystem ticket test will SKIP if manager_service_id was not captured.
+#       To capture it, run 08_services.http first and capture $.id from
+#       POST /services/{id}/managers/{id} response as "manager_service_id".
+#       (run_all.sh sets this variable via the service assignment step.)
+#
+# status_id=1 assumes 'Open' was seeded (see run_all.sh).
+# @expect 201
+# @capture new_eco_ticket_id $.id
+# @assert $.title E2EEcosystemTicket
+# @assert $.priority low
+POST /api/v1/tickets/ecosystem/
+
+{
+  "title": "E2EEcosystemTicket",
+  "description": "Created by E2E test suite for ecosystem ticket",
+  "manager_service_id": "{{manager_service_rel_id}}",
+  "status_id": 1,
+  "priority": "low"
+}
+
+### Get ecosystem ticket by ID
+# @expect 200
+# @assert $.id {{new_eco_ticket_id}}
+# @assert $.title E2EEcosystemTicket
+GET /api/v1/tickets/ecosystem/{{new_eco_ticket_id}}
+
+### Update ecosystem ticket priority
+# @expect 200
+# @assert $.priority medium
+PATCH /api/v1/tickets/ecosystem/{{new_eco_ticket_id}}
+
+{"priority": "medium"}
+
+### Update status
+# @expect 200
+# @assert $.status_id 1
+PATCH /api/v1/tickets/ecosystem/{{new_eco_ticket_id}}
+
+{"status_id": 1}
+
+### Get non-existent ecosystem ticket — 404
+# @expect 404
+GET /api/v1/tickets/ecosystem/00000000-0000-0000-0000-000000000008

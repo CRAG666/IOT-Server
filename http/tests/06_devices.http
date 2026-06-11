@@ -1,0 +1,62 @@
+### List devices
+# @expect 200
+GET /api/v1/devices/
+
+### Create device
+# @expect 201
+# @capture new_device_id $.id
+# @assert $.name E2EDevice
+# @assert $.is_active true
+POST /api/v1/devices/
+
+{
+  "name": "E2EDevice",
+  "brand": "Acme",
+  "model": "SensorX100",
+  "serial_number": "E2E-SN-001",
+  "ip": "192.168.1.100",
+  "mac": "AA:BB:CC:DD:EE:01"
+}
+
+### Get device by ID
+# @expect 200
+# @assert $.id {{new_device_id}}
+# @assert $.name E2EDevice
+# @assert $.brand Acme
+GET /api/v1/devices/{{new_device_id}}
+
+### Update device name
+# @expect 200
+# @assert $.name E2EDeviceUpd
+PATCH /api/v1/devices/{{new_device_id}}
+
+{"name": "E2EDeviceUpd"}
+
+### Restore device name
+# @expect 200
+# @assert $.name E2EDevice
+PATCH /api/v1/devices/{{new_device_id}}
+
+{"name": "E2EDevice"}
+
+### Deactivate device
+# @expect 200
+# @assert $.is_active false
+PATCH /api/v1/devices/{{new_device_id}}
+
+{"is_active": false}
+
+### Reactivate device
+# @expect 200
+# @assert $.is_active true
+PATCH /api/v1/devices/{{new_device_id}}
+
+{"is_active": true}
+
+### Get non-existent device — 404
+# @expect 404
+GET /api/v1/devices/00000000-0000-0000-0000-000000000003
+
+### List devices with pagination
+# @expect 200
+GET /api/v1/devices/?offset=0&limit=10

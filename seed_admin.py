@@ -1,31 +1,39 @@
-"""
-Script para crear un administrador master inicial.
+"""Idempotent bootstrap script — creates the first master administrator.
 
-Uso:
+Usage:
     uv run python seed_admin.py
+
+Environment:
+    ADMIN_EMAIL     — email for master admin (default: admin@iot.com)
+    ADMIN_PASSWORD  — password (default: Admin1234!)
+    ADMIN_FIRST     — first name (default: Admin)
+    ADMIN_LAST      — last name  (default: Master)
 """
 
+import os
 from sqlmodel import Session, select
 
-from app.database import engine
+from app.database import engine, create_db_and_tables
 from app.database.model import Administrator, NonCriticalPersonalData, SensitiveData
-from app.shared.auth.security import get_password_hash
+from app.shared.crypto import generate_salt, hash_password
 
 
-EMAIL = "admin@iot.com"
-PASSWORD = "Admin1234!"
-FIRST_NAME = "Admin"
-LAST_NAME = "Master"
+EMAIL = os.getenv("ADMIN_EMAIL", "admin@iot.com")
+PASSWORD = os.getenv("ADMIN_PASSWORD", "Admin1234!")
+FIRST_NAME = os.getenv("ADMIN_FIRST", "Admin")
+LAST_NAME = os.getenv("ADMIN_LAST", "Master")
 
 
 def create_initial_admin() -> None:
+    create_db_and_tables()
+
     with Session(engine) as session:
         existing = session.exec(
             select(SensitiveData).where(SensitiveData.email == EMAIL)
         ).first()
 
         if existing:
-            print(f"Ya existe un usuario con el email '{EMAIL}', no se creó nada.")
+            print(f"[skip] Master admin already exists: {EMAIL}")
             return
 
         personal_data = NonCriticalPersonalData(
@@ -35,10 +43,12 @@ def create_initial_admin() -> None:
         session.add(personal_data)
         session.flush()
 
+        salt = generate_salt()
         sensitive_data = SensitiveData(
             non_critical_data_id=personal_data.id,
             email=EMAIL,
-            password_hash=get_password_hash(PASSWORD),
+            password_hash=hash_password(PASSWORD, salt),
+            password_salt=salt,
         )
         session.add(sensitive_data)
         session.flush()
@@ -51,9 +61,10 @@ def create_initial_admin() -> None:
         session.add(admin)
         session.commit()
 
-        print("Admin master creado exitosamente:")
+        print("[ok] Master admin created:")
         print(f"  Email:    {EMAIL}")
         print(f"  Password: {PASSWORD}")
+        print("  Change the password immediately after first login!")
 
 
 if __name__ == "__main__":

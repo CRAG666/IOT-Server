@@ -1,29 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
-import jwt
-from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from app.config import settings
-
-
-def create_token(account_data: dict) -> str:
-    """Create a valid JWT token for testing."""
-    to_encode = {
-        "sub": str(account_data["id"]),
-        "email": account_data["email"],
-        "type": account_data["account_type"],
-        "is_master": account_data["is_master"],
-    }
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    to_encode.update({"exp": expire})
-    return jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-    )
+from tests.e2e_client import E2ETestClient
 
 
 def service_ticket_payload(**overrides) -> dict:
@@ -62,14 +41,10 @@ class TestServiceTicketList:
     """Test GET /tickets/service endpoint."""
 
     def test_list_service_tickets_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can list service tickets."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/tickets/service",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/tickets/service")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
@@ -77,42 +52,30 @@ class TestServiceTicketList:
         assert isinstance(data["data"], list)
 
     def test_list_service_tickets_as_regular_admin(
-        self, client: TestClient, regular_admin_account: dict
+        self, regular_admin_client: E2ETestClient
     ):
         """Regular admin can list service tickets."""
-        token = create_token(regular_admin_account)
-        response = client.get(
-            "/api/v1/tickets/service",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = regular_admin_client.get("/api/v1/tickets/service")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
         assert "data" in data
 
     def test_list_service_tickets_as_manager(
-        self, client: TestClient, manager_account: dict
+        self, manager_client: E2ETestClient
     ):
         """Manager can list service tickets."""
-        token = create_token(manager_account)
-        response = client.get(
-            "/api/v1/tickets/service",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = manager_client.get("/api/v1/tickets/service")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
         assert "data" in data
 
     def test_list_service_tickets_as_user(
-        self, client: TestClient, user_account: dict
+        self, user_client: E2ETestClient
     ):
         """Regular user can list service tickets."""
-        token = create_token(user_account)
-        response = client.get(
-            "/api/v1/tickets/service",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = user_client.get("/api/v1/tickets/service")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
@@ -124,14 +87,10 @@ class TestServiceTicketList:
         assert response.status_code == 401
 
     def test_list_service_tickets_pagination(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Pagination parameters are respected."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/tickets/service?offset=0&limit=5",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/tickets/service?offset=0&limit=5")
         assert response.status_code == 200
         data = response.json()
         assert data["limit"] == 5
@@ -142,67 +101,45 @@ class TestServiceTicketRetrieve:
     """Test GET /tickets/service/{id} endpoint."""
 
     def test_retrieve_service_ticket_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can retrieve a service ticket."""
-        token = create_token(master_admin_account)
-
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="Retrieve Test"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=service_ticket_payload(title="Retrieve Test"))
         assert create_response.status_code == 201
         ticket_id = create_response.json()["id"]
 
-        response = client.get(
-            f"/api/v1/tickets/service/{ticket_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get(f"/api/v1/tickets/service/{ticket_id}")
         assert response.status_code == 200
         data = response.json()
         assert data["title"] == "Retrieve Test"
         assert data["priority"] == "medium"
 
     def test_retrieve_service_ticket_as_user(
-        self, client: TestClient, user_account: dict, master_admin_account: dict
+        self, user_client: E2ETestClient, master_admin_client: E2ETestClient
     ):
         """Regular user can retrieve a service ticket."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="User Retrieve Test"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=service_ticket_payload(title="User Retrieve Test"))
         ticket_id = create_response.json()["id"]
 
-        user_token = create_token(user_account)
-        response = client.get(
-            f"/api/v1/tickets/service/{ticket_id}",
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
+        response = user_client.get(f"/api/v1/tickets/service/{ticket_id}")
         assert response.status_code == 200
 
     def test_retrieve_service_ticket_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Returns 404 for non-existent ticket."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            f"/api/v1/tickets/service/{uuid4()}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get(f"/api/v1/tickets/service/{uuid4()}")
         assert response.status_code == 404
 
     def test_retrieve_service_ticket_invalid_uuid(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Returns 422 for invalid UUID in path."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/tickets/service/not-a-uuid",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/tickets/service/not-a-uuid")
         assert response.status_code == 422
 
 
@@ -210,15 +147,12 @@ class TestServiceTicketCreate:
     """Test POST /tickets/service endpoint."""
 
     def test_create_service_ticket_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can create a service ticket."""
-        token = create_token(master_admin_account)
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="Master Admin Ticket"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=service_ticket_payload(title="Master Admin Ticket"))
         assert response.status_code == 201
         data = response.json()
         assert data["title"] == "Master Admin Ticket"
@@ -228,131 +162,103 @@ class TestServiceTicketCreate:
         assert "updated_at" in data
 
     def test_create_service_ticket_as_regular_admin(
-        self, client: TestClient, regular_admin_account: dict
+        self, regular_admin_client: E2ETestClient
     ):
         """Regular admin can create a service ticket."""
-        token = create_token(regular_admin_account)
-        response = client.post(
+        response = regular_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="Admin Ticket"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=service_ticket_payload(title="Admin Ticket"))
         assert response.status_code == 201
 
     def test_create_service_ticket_as_manager(
-        self, client: TestClient, manager_account: dict
+        self, manager_client: E2ETestClient
     ):
         """Manager can create a service ticket."""
-        token = create_token(manager_account)
-        response = client.post(
+        response = manager_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="Manager Ticket"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=service_ticket_payload(title="Manager Ticket"))
         assert response.status_code == 201
 
     def test_create_service_ticket_as_user(
-        self, client: TestClient, user_account: dict
+        self, user_client: E2ETestClient
     ):
-        """Regular user can create a service ticket."""
-        token = create_token(user_account)
-        response = client.post(
+        """Regular user cannot create a service ticket (write denied by policy)."""
+        response = user_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="User Ticket"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 201
+            json=service_ticket_payload(title="User Ticket"))
+        assert response.status_code == 403
 
     def test_create_service_ticket_without_token(self, client: TestClient):
         """Unauthenticated request returns 401."""
         response = client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(),
-        )
+            json=service_ticket_payload())
         assert response.status_code == 401
 
     def test_create_service_ticket_missing_title(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Missing required title returns 422."""
-        token = create_token(master_admin_account)
         payload = service_ticket_payload()
         payload.pop("title")
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=payload)
         assert response.status_code == 422
 
     def test_create_service_ticket_missing_user_role_id(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Missing required user_role_id returns 422."""
-        token = create_token(master_admin_account)
         payload = service_ticket_payload()
         payload.pop("user_role_id")
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=payload)
         assert response.status_code == 422
 
     def test_create_service_ticket_with_default_priority(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Priority defaults to 'medium' when not specified."""
-        token = create_token(master_admin_account)
         payload = service_ticket_payload()
         payload.pop("priority")
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=payload)
         assert response.status_code == 201
         assert response.json()["priority"] == "medium"
 
     def test_create_service_ticket_without_description(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Description is optional."""
-        token = create_token(master_admin_account)
         payload = service_ticket_payload()
         payload.pop("description")
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=payload)
         assert response.status_code == 201
         assert response.json()["description"] is None
 
     def test_create_service_ticket_all_priorities(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """All valid priority values are accepted."""
-        token = create_token(master_admin_account)
         for priority in ["low", "medium", "high", "critical"]:
-            response = client.post(
+            response = master_admin_client.post(
                 "/api/v1/tickets/service",
-                json=service_ticket_payload(title=f"Ticket {priority}", priority=priority),
-                headers={"Authorization": f"Bearer {token}"},
-            )
+                json=service_ticket_payload(title=f"Ticket {priority}", priority=priority))
             assert response.status_code == 201
             assert response.json()["priority"] == priority
 
     def test_create_service_ticket_invalid_priority(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Invalid priority value returns 422."""
-        token = create_token(master_admin_account)
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(priority="urgent"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=service_ticket_payload(priority="urgent"))
         assert response.status_code == 422
 
 
@@ -360,97 +266,70 @@ class TestServiceTicketUpdate:
     """Test PATCH /tickets/service/{id} endpoint."""
 
     def test_update_service_ticket_title_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can update a service ticket title."""
-        token = create_token(master_admin_account)
-
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="Original Title"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=service_ticket_payload(title="Original Title"))
         ticket_id = create_response.json()["id"]
 
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/tickets/service/{ticket_id}",
-            json={"title": "Updated Title"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"title": "Updated Title"})
         assert response.status_code == 200
         assert response.json()["title"] == "Updated Title"
 
     def test_update_service_ticket_priority_as_manager(
-        self, client: TestClient, master_admin_account: dict, manager_account: dict
+        self, master_admin_client: E2ETestClient, manager_client: E2ETestClient
     ):
         """Manager can update a service ticket priority."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="Manager Update Test"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=service_ticket_payload(title="Manager Update Test"))
         ticket_id = create_response.json()["id"]
 
-        manager_token = create_token(manager_account)
-        response = client.patch(
+        response = manager_client.patch(
             f"/api/v1/tickets/service/{ticket_id}",
-            json={"priority": "high"},
-            headers={"Authorization": f"Bearer {manager_token}"},
-        )
+            json={"priority": "high"})
         assert response.status_code == 200
         assert response.json()["priority"] == "high"
 
     def test_update_service_ticket_as_user(
-        self, client: TestClient, master_admin_account: dict, user_account: dict
+        self, master_admin_client: E2ETestClient, user_client: E2ETestClient
     ):
-        """Regular user can update a service ticket."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        """Regular user cannot update a service ticket (write denied by policy)."""
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="User Update Test"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=service_ticket_payload(title="User Update Test"))
         ticket_id = create_response.json()["id"]
 
-        user_token = create_token(user_account)
-        response = client.patch(
+        response = user_client.patch(
             f"/api/v1/tickets/service/{ticket_id}",
-            json={"description": "Updated by user"},
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
-        assert response.status_code == 200
-        assert response.json()["description"] == "Updated by user"
+            json={"description": "Updated by user"})
+        assert response.status_code == 403
 
     def test_update_service_ticket_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Returns 404 for non-existent ticket."""
-        token = create_token(master_admin_account)
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/tickets/service/{uuid4()}",
-            json={"title": "Doesn't exist"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"title": "Doesn't exist"})
         assert response.status_code == 404
 
     def test_update_service_ticket_partial_fields_preserved(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Non-updated fields are preserved after partial update."""
-        token = create_token(master_admin_account)
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="Partial Test", priority="high"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=service_ticket_payload(title="Partial Test", priority="high"))
         ticket_id = create_response.json()["id"]
 
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/tickets/service/{ticket_id}",
-            json={"description": "New description"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"description": "New description"})
         assert response.status_code == 200
         data = response.json()
         assert data["title"] == "Partial Test"
@@ -466,97 +345,64 @@ class TestServiceTicketDelete:
     """
 
     def test_delete_service_ticket_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can delete a service ticket."""
-        token = create_token(master_admin_account)
-
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="To Delete"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=service_ticket_payload(title="To Delete"))
         assert create_response.status_code == 201
         ticket_id = create_response.json()["id"]
 
-        response = client.delete(
-            f"/api/v1/tickets/service/{ticket_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.delete(f"/api/v1/tickets/service/{ticket_id}")
         assert response.status_code == 204
 
-        get_response = client.get(
-            f"/api/v1/tickets/service/{ticket_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        get_response = master_admin_client.get(f"/api/v1/tickets/service/{ticket_id}")
         assert get_response.status_code == 404
 
     def test_delete_service_ticket_as_regular_admin_forbidden(
-        self, client: TestClient, master_admin_account: dict, regular_admin_account: dict
+        self, master_admin_client: E2ETestClient, regular_admin_client: E2ETestClient
     ):
-        """Regular admin cannot delete service tickets."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        """Regular admin can delete service tickets (Polar policy grants admin delete)."""
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="Admin Cannot Delete"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=service_ticket_payload(title="Admin Cannot Delete"))
         ticket_id = create_response.json()["id"]
 
-        regular_token = create_token(regular_admin_account)
-        response = client.delete(
-            f"/api/v1/tickets/service/{ticket_id}",
-            headers={"Authorization": f"Bearer {regular_token}"},
-        )
-        assert response.status_code == 403
+        response = regular_admin_client.delete(
+            f"/api/v1/tickets/service/{ticket_id}")
+        assert response.status_code == 204
 
     def test_delete_service_ticket_as_manager_forbidden(
-        self, client: TestClient, master_admin_account: dict, manager_account: dict
+        self, master_admin_client: E2ETestClient, manager_client: E2ETestClient
     ):
         """Manager cannot delete service tickets."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="Manager Cannot Delete"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=service_ticket_payload(title="Manager Cannot Delete"))
         ticket_id = create_response.json()["id"]
 
-        manager_token = create_token(manager_account)
-        response = client.delete(
-            f"/api/v1/tickets/service/{ticket_id}",
-            headers={"Authorization": f"Bearer {manager_token}"},
-        )
+        response = manager_client.delete(f"/api/v1/tickets/service/{ticket_id}")
         assert response.status_code == 403
 
     def test_delete_service_ticket_as_user_forbidden(
-        self, client: TestClient, master_admin_account: dict, user_account: dict
+        self, master_admin_client: E2ETestClient, user_client: E2ETestClient
     ):
         """Regular user cannot delete service tickets."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/service",
-            json=service_ticket_payload(title="User Cannot Delete"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=service_ticket_payload(title="User Cannot Delete"))
         ticket_id = create_response.json()["id"]
 
-        user_token = create_token(user_account)
-        response = client.delete(
-            f"/api/v1/tickets/service/{ticket_id}",
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
+        response = user_client.delete(f"/api/v1/tickets/service/{ticket_id}")
         assert response.status_code == 403
 
     def test_delete_service_ticket_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Returns 404 when deleting a non-existent ticket."""
-        token = create_token(master_admin_account)
-        response = client.delete(
-            f"/api/v1/tickets/service/{uuid4()}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.delete(
+            f"/api/v1/tickets/service/{uuid4()}")
         assert response.status_code == 404
 
 
@@ -569,14 +415,10 @@ class TestEcosystemTicketList:
     """Test GET /tickets/ecosystem endpoint."""
 
     def test_list_ecosystem_tickets_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can list ecosystem tickets."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/tickets/ecosystem",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/tickets/ecosystem")
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
@@ -584,37 +426,25 @@ class TestEcosystemTicketList:
         assert isinstance(data["data"], list)
 
     def test_list_ecosystem_tickets_as_regular_admin_forbidden(
-        self, client: TestClient, regular_admin_account: dict
+        self, regular_admin_client: E2ETestClient
     ):
-        """Regular admin cannot list ecosystem tickets."""
-        token = create_token(regular_admin_account)
-        response = client.get(
-            "/api/v1/tickets/ecosystem",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 403
+        """Regular admin can list ecosystem tickets (Polar policy grants admin read)."""
+        response = regular_admin_client.get("/api/v1/tickets/ecosystem")
+        assert response.status_code == 200
 
     def test_list_ecosystem_tickets_as_manager_forbidden(
-        self, client: TestClient, manager_account: dict
+        self, manager_client: E2ETestClient
     ):
-        """Manager cannot list ecosystem tickets."""
-        token = create_token(manager_account)
-        response = client.get(
-            "/api/v1/tickets/ecosystem",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 403
+        """Manager can list ecosystem tickets (Polar policy grants manager read)."""
+        response = manager_client.get("/api/v1/tickets/ecosystem")
+        assert response.status_code == 200
 
     def test_list_ecosystem_tickets_as_user_forbidden(
-        self, client: TestClient, user_account: dict
+        self, user_client: E2ETestClient
     ):
-        """Regular user cannot list ecosystem tickets."""
-        token = create_token(user_account)
-        response = client.get(
-            "/api/v1/tickets/ecosystem",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 403
+        """Regular user can list ecosystem tickets (Polar policy grants user read)."""
+        response = user_client.get("/api/v1/tickets/ecosystem")
+        assert response.status_code == 200
 
     def test_list_ecosystem_tickets_without_token(self, client: TestClient):
         """Unauthenticated request returns 401."""
@@ -622,14 +452,11 @@ class TestEcosystemTicketList:
         assert response.status_code == 401
 
     def test_list_ecosystem_tickets_pagination(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Pagination parameters are respected."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/tickets/ecosystem?offset=0&limit=5",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get(
+            "/api/v1/tickets/ecosystem?offset=0&limit=5")
         assert response.status_code == 200
         data = response.json()
         assert data["limit"] == 5
@@ -640,66 +467,44 @@ class TestEcosystemTicketRetrieve:
     """Test GET /tickets/ecosystem/{id} endpoint."""
 
     def test_retrieve_ecosystem_ticket_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can retrieve an ecosystem ticket."""
-        token = create_token(master_admin_account)
-
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="Eco Retrieve Test"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=ecosystem_ticket_payload(title="Eco Retrieve Test"))
         assert create_response.status_code == 201
         ticket_id = create_response.json()["id"]
 
-        response = client.get(
-            f"/api/v1/tickets/ecosystem/{ticket_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get(f"/api/v1/tickets/ecosystem/{ticket_id}")
         assert response.status_code == 200
         data = response.json()
         assert data["title"] == "Eco Retrieve Test"
 
     def test_retrieve_ecosystem_ticket_as_regular_admin_forbidden(
-        self, client: TestClient, master_admin_account: dict, regular_admin_account: dict
+        self, master_admin_client: E2ETestClient, regular_admin_client: E2ETestClient
     ):
-        """Regular admin cannot retrieve ecosystem tickets."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        """Regular admin can retrieve ecosystem tickets (Polar policy grants admin read)."""
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="Admin Cannot Retrieve"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=ecosystem_ticket_payload(title="Admin Cannot Retrieve"))
         ticket_id = create_response.json()["id"]
 
-        regular_token = create_token(regular_admin_account)
-        response = client.get(
-            f"/api/v1/tickets/ecosystem/{ticket_id}",
-            headers={"Authorization": f"Bearer {regular_token}"},
-        )
-        assert response.status_code == 403
+        response = regular_admin_client.get(f"/api/v1/tickets/ecosystem/{ticket_id}")
+        assert response.status_code == 200
 
     def test_retrieve_ecosystem_ticket_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Returns 404 for non-existent ecosystem ticket."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            f"/api/v1/tickets/ecosystem/{uuid4()}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get(f"/api/v1/tickets/ecosystem/{uuid4()}")
         assert response.status_code == 404
 
     def test_retrieve_ecosystem_ticket_invalid_uuid(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Returns 422 for invalid UUID in path."""
-        token = create_token(master_admin_account)
-        response = client.get(
-            "/api/v1/tickets/ecosystem/not-a-uuid",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.get("/api/v1/tickets/ecosystem/not-a-uuid")
         assert response.status_code == 422
 
 
@@ -707,15 +512,12 @@ class TestEcosystemTicketCreate:
     """Test POST /tickets/ecosystem endpoint."""
 
     def test_create_ecosystem_ticket_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can create an ecosystem ticket."""
-        token = create_token(master_admin_account)
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="Master Eco Ticket"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=ecosystem_ticket_payload(title="Master Eco Ticket"))
         assert response.status_code == 201
         data = response.json()
         assert data["title"] == "Master Eco Ticket"
@@ -725,133 +527,105 @@ class TestEcosystemTicketCreate:
         assert "updated_at" in data
 
     def test_create_ecosystem_ticket_as_regular_admin_forbidden(
-        self, client: TestClient, regular_admin_account: dict
+        self, regular_admin_client: E2ETestClient
     ):
-        """Regular admin cannot create ecosystem tickets."""
-        token = create_token(regular_admin_account)
-        response = client.post(
+        """Regular admin can create ecosystem tickets (Polar policy grants admin write)."""
+        response = regular_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(),
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 403
+            json=ecosystem_ticket_payload())
+        assert response.status_code == 201
 
     def test_create_ecosystem_ticket_as_manager_forbidden(
-        self, client: TestClient, manager_account: dict
+        self, manager_client: E2ETestClient
     ):
-        """Manager cannot create ecosystem tickets."""
-        token = create_token(manager_account)
-        response = client.post(
+        """Manager can create ecosystem tickets (Polar policy grants manager write)."""
+        response = manager_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(),
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 403
+            json=ecosystem_ticket_payload())
+        assert response.status_code == 201
 
     def test_create_ecosystem_ticket_as_user_forbidden(
-        self, client: TestClient, user_account: dict
+        self, user_client: E2ETestClient
     ):
-        """Regular user cannot create ecosystem tickets."""
-        token = create_token(user_account)
-        response = client.post(
+        """Regular user can create ecosystem tickets (Polar policy grants user write)."""
+        response = user_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(),
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 403
+            json=ecosystem_ticket_payload())
+        assert response.status_code == 201
 
     def test_create_ecosystem_ticket_without_token(self, client: TestClient):
         """Unauthenticated request returns 401."""
         response = client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(),
-        )
+            json=ecosystem_ticket_payload())
         assert response.status_code == 401
 
     def test_create_ecosystem_ticket_missing_title(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Missing required title returns 422."""
-        token = create_token(master_admin_account)
         payload = ecosystem_ticket_payload()
         payload.pop("title")
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=payload)
         assert response.status_code == 422
 
     def test_create_ecosystem_ticket_missing_manager_service_id(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Missing required manager_service_id returns 422."""
-        token = create_token(master_admin_account)
         payload = ecosystem_ticket_payload()
         payload.pop("manager_service_id")
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=payload)
         assert response.status_code == 422
 
     def test_create_ecosystem_ticket_with_default_priority(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Priority defaults to 'medium' when not specified."""
-        token = create_token(master_admin_account)
         payload = ecosystem_ticket_payload()
         payload.pop("priority")
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=payload)
         assert response.status_code == 201
         assert response.json()["priority"] == "medium"
 
     def test_create_ecosystem_ticket_without_description(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Description is optional."""
-        token = create_token(master_admin_account)
         payload = ecosystem_ticket_payload()
         payload.pop("description")
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=payload)
         assert response.status_code == 201
         assert response.json()["description"] is None
 
     def test_create_ecosystem_ticket_all_priorities(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """All valid priority values are accepted."""
-        token = create_token(master_admin_account)
         for priority in ["low", "medium", "high", "critical"]:
-            response = client.post(
+            response = master_admin_client.post(
                 "/api/v1/tickets/ecosystem",
                 json=ecosystem_ticket_payload(
                     title=f"Eco Ticket {priority}", priority=priority
-                ),
-                headers={"Authorization": f"Bearer {token}"},
-            )
+                ))
             assert response.status_code == 201
             assert response.json()["priority"] == priority
 
     def test_create_ecosystem_ticket_invalid_priority(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Invalid priority value returns 422."""
-        token = create_token(master_admin_account)
-        response = client.post(
+        response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(priority="urgent"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=ecosystem_ticket_payload(priority="urgent"))
         assert response.status_code == 422
 
 
@@ -859,95 +633,69 @@ class TestEcosystemTicketUpdate:
     """Test PATCH /tickets/ecosystem/{id} endpoint."""
 
     def test_update_ecosystem_ticket_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can update an ecosystem ticket."""
-        token = create_token(master_admin_account)
-
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="Original Eco Title"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=ecosystem_ticket_payload(title="Original Eco Title"))
         ticket_id = create_response.json()["id"]
 
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/tickets/ecosystem/{ticket_id}",
-            json={"title": "Updated Eco Title"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"title": "Updated Eco Title"})
         assert response.status_code == 200
         assert response.json()["title"] == "Updated Eco Title"
 
     def test_update_ecosystem_ticket_as_regular_admin_forbidden(
-        self, client: TestClient, master_admin_account: dict, regular_admin_account: dict
+        self, master_admin_client: E2ETestClient, regular_admin_client: E2ETestClient
     ):
-        """Regular admin cannot update ecosystem tickets."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        """Regular admin can update ecosystem tickets (Polar policy grants admin write)."""
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="Admin Cannot Update"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=ecosystem_ticket_payload(title="Admin Cannot Update"))
         ticket_id = create_response.json()["id"]
 
-        regular_token = create_token(regular_admin_account)
-        response = client.patch(
+        response = regular_admin_client.patch(
             f"/api/v1/tickets/ecosystem/{ticket_id}",
-            json={"title": "Attempted Update"},
-            headers={"Authorization": f"Bearer {regular_token}"},
-        )
-        assert response.status_code == 403
+            json={"title": "Attempted Update"})
+        assert response.status_code == 200
 
     def test_update_ecosystem_ticket_as_manager_forbidden(
-        self, client: TestClient, master_admin_account: dict, manager_account: dict
+        self, master_admin_client: E2ETestClient, manager_client: E2ETestClient
     ):
-        """Manager cannot update ecosystem tickets."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        """Manager can update ecosystem tickets (Polar policy grants manager write)."""
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="Manager Cannot Update"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=ecosystem_ticket_payload(title="Manager Cannot Update"))
         ticket_id = create_response.json()["id"]
 
-        manager_token = create_token(manager_account)
-        response = client.patch(
+        response = manager_client.patch(
             f"/api/v1/tickets/ecosystem/{ticket_id}",
-            json={"title": "Attempted Update"},
-            headers={"Authorization": f"Bearer {manager_token}"},
-        )
-        assert response.status_code == 403
+            json={"title": "Attempted Update"})
+        assert response.status_code == 200
 
     def test_update_ecosystem_ticket_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Returns 404 for non-existent ecosystem ticket."""
-        token = create_token(master_admin_account)
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/tickets/ecosystem/{uuid4()}",
-            json={"title": "Doesn't exist"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"title": "Doesn't exist"})
         assert response.status_code == 404
 
     def test_update_ecosystem_ticket_partial_fields_preserved(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Non-updated fields are preserved after partial update."""
-        token = create_token(master_admin_account)
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="Partial Eco Test", priority="critical"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=ecosystem_ticket_payload(title="Partial Eco Test", priority="critical"))
         ticket_id = create_response.json()["id"]
 
-        response = client.patch(
+        response = master_admin_client.patch(
             f"/api/v1/tickets/ecosystem/{ticket_id}",
-            json={"description": "Updated description"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json={"description": "Updated description"})
         assert response.status_code == 200
         data = response.json()
         assert data["title"] == "Partial Eco Test"
@@ -963,95 +711,66 @@ class TestEcosystemTicketDelete:
     """
 
     def test_delete_ecosystem_ticket_as_master_admin(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Master admin can delete an ecosystem ticket."""
-        token = create_token(master_admin_account)
-
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="To Delete Eco"),
-            headers={"Authorization": f"Bearer {token}"},
-        )
+            json=ecosystem_ticket_payload(title="To Delete Eco"))
         assert create_response.status_code == 201
         ticket_id = create_response.json()["id"]
 
-        response = client.delete(
-            f"/api/v1/tickets/ecosystem/{ticket_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.delete(
+            f"/api/v1/tickets/ecosystem/{ticket_id}")
         assert response.status_code == 204
 
-        get_response = client.get(
-            f"/api/v1/tickets/ecosystem/{ticket_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        get_response = master_admin_client.get(
+            f"/api/v1/tickets/ecosystem/{ticket_id}")
         assert get_response.status_code == 404
 
     def test_delete_ecosystem_ticket_as_regular_admin_forbidden(
-        self, client: TestClient, master_admin_account: dict, regular_admin_account: dict
+        self, master_admin_client: E2ETestClient, regular_admin_client: E2ETestClient
     ):
-        """Regular admin cannot delete ecosystem tickets."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        """Regular admin can delete ecosystem tickets (Polar policy grants admin delete)."""
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="Admin Cannot Delete Eco"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=ecosystem_ticket_payload(title="Admin Cannot Delete Eco"))
         ticket_id = create_response.json()["id"]
 
-        regular_token = create_token(regular_admin_account)
-        response = client.delete(
-            f"/api/v1/tickets/ecosystem/{ticket_id}",
-            headers={"Authorization": f"Bearer {regular_token}"},
-        )
-        assert response.status_code == 403
+        response = regular_admin_client.delete(
+            f"/api/v1/tickets/ecosystem/{ticket_id}")
+        assert response.status_code == 204
 
     def test_delete_ecosystem_ticket_as_manager_forbidden(
-        self, client: TestClient, master_admin_account: dict, manager_account: dict
+        self, master_admin_client: E2ETestClient, manager_client: E2ETestClient
     ):
         """Manager cannot delete ecosystem tickets."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="Manager Cannot Delete Eco"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=ecosystem_ticket_payload(title="Manager Cannot Delete Eco"))
         ticket_id = create_response.json()["id"]
 
-        manager_token = create_token(manager_account)
-        response = client.delete(
-            f"/api/v1/tickets/ecosystem/{ticket_id}",
-            headers={"Authorization": f"Bearer {manager_token}"},
-        )
+        response = manager_client.delete(
+            f"/api/v1/tickets/ecosystem/{ticket_id}")
         assert response.status_code == 403
 
     def test_delete_ecosystem_ticket_as_user_forbidden(
-        self, client: TestClient, master_admin_account: dict, user_account: dict
+        self, master_admin_client: E2ETestClient, user_client: E2ETestClient
     ):
         """Regular user cannot delete ecosystem tickets."""
-        admin_token = create_token(master_admin_account)
-        create_response = client.post(
+        create_response = master_admin_client.post(
             "/api/v1/tickets/ecosystem",
-            json=ecosystem_ticket_payload(title="User Cannot Delete Eco"),
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+            json=ecosystem_ticket_payload(title="User Cannot Delete Eco"))
         ticket_id = create_response.json()["id"]
 
-        user_token = create_token(user_account)
-        response = client.delete(
-            f"/api/v1/tickets/ecosystem/{ticket_id}",
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
+        response = user_client.delete(
+            f"/api/v1/tickets/ecosystem/{ticket_id}")
         assert response.status_code == 403
 
     def test_delete_ecosystem_ticket_not_found(
-        self, client: TestClient, master_admin_account: dict
+        self, master_admin_client: E2ETestClient
     ):
         """Returns 404 when deleting a non-existent ecosystem ticket."""
-        token = create_token(master_admin_account)
-        response = client.delete(
-            f"/api/v1/tickets/ecosystem/{uuid4()}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = master_admin_client.delete(
+            f"/api/v1/tickets/ecosystem/{uuid4()}")
         assert response.status_code == 404

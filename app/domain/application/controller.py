@@ -13,24 +13,18 @@ from app.database import SessionDep
 from app.shared.middleware.auth.applications.auth import CryptoManager
 from app.shared.session.service import SessionService
 from app.config import settings
-from app.shared.authorization.dependencies import require_read, require_write, require_delete  # nuevo
-from app.database.model import Application  # nuevo
+from app.shared.authorization.dependencies import require_write
+from app.database.model import Application
 
 
 class ApplicationController(FullCrudApiController):
     prefix = "/applications"
     tags = ["Applications"]
+    model_class = Application
     service_dep = ApplicationServiceDep
     response_schema = ApplicationResponse
     create_schema = ApplicationCreate
     update_schema = ApplicationUpdate
-
-    # nuevo
-    list_dependencies = [require_read(Application)]
-    retrieve_dependencies = [require_read(Application)]
-    create_dependencies = [require_write(Application)]
-    update_dependencies = [require_write(Application)]
-    delete_dependencies = [require_delete(Application)]
 
 
 application_router = ApplicationController().router
@@ -47,6 +41,7 @@ application_router.routes = [
     response_model=ApplicationCreateResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["Applications"],
+    dependencies=[require_write(Application)],
 )
 def create_application(service: ApplicationServiceDep, payload: ApplicationCreate):
     entity = service.create_entity(payload)

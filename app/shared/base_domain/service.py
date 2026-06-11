@@ -16,25 +16,6 @@ T = TypeVar("T", bound=BaseTable)
 P_create = TypeVar("P_create", bound=BaseModel)
 P_update = TypeVar("P_update", bound=BaseModel)
 
-_AUDIT_EXCLUDED_FIELDS = {
-    "id", "created_at", "updated_at",
-    "password_hash",
-    "encryption_key",
-    "curp",
-    "rfc",
-    "api_key",
-}
-
-_AUDIT_EXCLUDED_FIELDS = {
-    "id", "created_at", "updated_at",
-    "password_hash",
-    "encryption_key",
-    "curp",
-    "rfc",
-    "api_key",
-}
-
-
 class IBaseService(ABC, Generic[T, P_create, P_update]):
     entity_name: str
 
@@ -57,6 +38,7 @@ class IBaseService(ABC, Generic[T, P_create, P_update]):
 class BaseService(IBaseService[T, P_create, P_update], Generic[T, P_create, P_update]):
     entity_name: str = "Entidad"
     repository_class: ClassVar[type[BaseRepository]]
+    audit_excluded_fields: ClassVar[frozenset[str]] = frozenset({"id", "created_at", "updated_at"})
 
     def __init__(self, session: Session):
         self.repository: IBaseRepository[T] = self.repository_class(session)
@@ -102,7 +84,7 @@ class BaseService(IBaseService[T, P_create, P_update], Generic[T, P_create, P_up
         if action == "update" and old:
             changes = {}
             new = entity.model_dump()
-            for key in [k for k in old if k not in _AUDIT_EXCLUDED_FIELDS]:
+            for key in [k for k in old if k not in self.audit_excluded_fields]:
                 if old.get(key) != new.get(key):
                     changes[key] = {"from": str(old[key]), "to": str(new[key])}
             if changes:

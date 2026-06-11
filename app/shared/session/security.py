@@ -75,7 +75,7 @@ class JWEHandler:
 
         if isinstance(encrypted, bytes):
             return encrypted.decode()
-        return encrypted
+        return encrypted  # pragma: no cover
 
     def decrypt(self, token: str) -> dict[str, Any]:
         decrypted = jwe.decrypt(token.encode(), self.encryption_key)

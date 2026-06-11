@@ -1,25 +1,12 @@
 import pytest
-from datetime import datetime, timedelta, timezone
 from uuid import uuid4
-import jwt
 
-from app.config import settings
 from app.shared.authorization.dependencies import (
     _current_user_ctx,
-    get_current_user_from_context,
-)
+    get_current_user_from_context)
 from app.shared.authorization.models import CurrentUser
 from app.domain.audit.repository import AuditRepository
 
-
-def create_token(account_data: dict) -> str:
-    to_encode = {
-        "sub": str(account_data["id"]),
-        "email": account_data["email"],
-        "type": account_data["account_type"],
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
-    }
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
 @pytest.fixture
@@ -29,8 +16,7 @@ def mock_admin():
         account_type="administrator",
         email="admin@iot.com",
         is_master=True,
-        sensitive_data_id=uuid4(),
-    )
+        sensitive_data_id=uuid4())
 
 
 @pytest.fixture
@@ -40,8 +26,7 @@ def mock_manager():
         account_type="manager",
         email="manager@iot.com",
         is_master=False,
-        sensitive_data_id=uuid4(),
-    )
+        sensitive_data_id=uuid4())
 
 
 @pytest.fixture
@@ -83,8 +68,7 @@ class TestAuditRepository:
             account_type="administrator",
             action="create",
             resource_type="Device",
-            resource_id=uuid4(),
-        )
+            resource_id=uuid4())
         assert entry.id is not None
         assert entry.created_at is not None
         assert entry.action == "create"
@@ -98,8 +82,7 @@ class TestAuditRepository:
             resource_type="Service",
             resource_id=uuid4(),
             details='{"name":{"from":"old","to":"new"}}',
-            ip_address="10.0.0.1",
-        )
+            ip_address="10.0.0.1")
         assert entry.details == '{"name":{"from":"old","to":"new"}}'
         assert entry.ip_address == "10.0.0.1"
         assert entry.account_type == "manager"
@@ -143,80 +126,58 @@ class TestAuditRepository:
             account_type="admin",
             action="login",
             resource_type="Auth",
-            resource_id=None,
-        )
+            resource_id=None)
         assert entry.resource_id is None
 
 
 class TestAuditLogNoSensitiveData:
-    def test_device_encryption_key_not_logged(self, client, master_admin_account):
-        token = create_token(master_admin_account)
+    def test_device_encryption_key_not_logged(self, master_admin_client):
 
-        resp = client.post(
+        resp = master_admin_client.post(
             "/api/v1/devices",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Sec Device", "encryption_key": "secret-key-12345"},
-        )
+            json={"name": "Sec Device", "encryption_key": "secret-key-12345"})
         assert resp.status_code in [200, 201]
 
-        resp2 = client.patch(
+        resp2 = master_admin_client.patch(
             f"/api/v1/devices/{resp.json()['id']}",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"encryption_key": "new-secret-key"},
-        )
+            json={"encryption_key": "new-secret-key"})
         assert resp2.status_code == 200
 
 
 class TestAuditLogViaAPI:
-    def test_device_create_generates_audit(self, client, master_admin_account):
-        token = create_token(master_admin_account)
-        resp = client.post(
+    def test_device_create_generates_audit(self, master_admin_client):
+        resp = master_admin_client.post(
             "/api/v1/devices",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Audit Device"},
-        )
+            json={"name": "Audit Device"})
         assert resp.status_code in [200, 201]
 
-    def test_device_update_generates_audit(self, client, master_admin_account):
-        token = create_token(master_admin_account)
-        resp = client.post(
+    def test_device_update_generates_audit(self, master_admin_client):
+        resp = master_admin_client.post(
             "/api/v1/devices",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Device AUD"},
-        )
+            json={"name": "Device AUD"})
         device_id = resp.json()["id"]
 
-        resp2 = client.patch(
+        resp2 = master_admin_client.patch(
             f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Device AUD Updated"},
-        )
+            json={"name": "Device AUD Updated"})
         assert resp2.status_code == 200
 
-    def test_device_delete_generates_audit(self, client, master_admin_account):
-        token = create_token(master_admin_account)
-        resp = client.post(
+    def test_device_delete_generates_audit(self, master_admin_client):
+        resp = master_admin_client.post(
             "/api/v1/devices",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Device to Delete"},
-        )
+            json={"name": "Device to Delete"})
         device_id = resp.json()["id"]
 
-        resp2 = client.delete(
-            f"/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        resp2 = master_admin_client.delete(
+            f"/api/v1/devices/{device_id}")
         assert resp2.status_code == 204
 
-    def test_service_create_generates_audit(self, client, master_admin_account):
-        token = create_token(master_admin_account)
-        resp = client.post(
+    def test_service_create_generates_audit(self, master_admin_client):
+        resp = master_admin_client.post(
             "/api/v1/services",
-            headers={"Authorization": f"Bearer {token}"},
             json={
                 "name": f"Audit Service {uuid4().hex[:8]}",
                 "description": "Audit test",
-                "administrator_id": str(master_admin_account["id"]),
-            },
-        )
+                "administrator_id": str(master_admin_client.account['id']),
+            })
         assert resp.status_code in [200, 201]
